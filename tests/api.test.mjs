@@ -1,0 +1,88 @@
+import test, { before, after } from 'node:test';
+import assert from 'node:assert/strict';
+import { spawn } from 'node:child_process';
+import { mkdtempSync, rmSync } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { PDFDocument } from 'pdf-lib';
+
+const directory = mkdtempSync(path.join(os.tmpdir(), 'civinco-api-'));
+const port = 14173;
+let processHandle;
+async function api(url, body, method) {
+  const response = await fetch(`http://127.0.0.1:${port}/api${url}`, { method: method || (body ? 'POST' : 'GET'), headers: body instanceof FormData ? {} : { 'Content-Type': 'application/json' }, body: body ? body instanceof FormData ? body : JSON.stringify(body) : undefined });
+  return { status: response.status, data: await response.json() };
+}
+async function start() {
+  processHandle = spawn(process.execPath, ['server/index.mjs', '--production'], { env: { ...process.env, PORT: String(port), CIVINCO_DATA_DIR: directory, GEMINI_API_KEY: '' }, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
+  await new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('Server startup timed out')), 15000);
+    processHandle.once('error', reject);
+    processHandle.stdout.on('data', chunk => { if (chunk.toString().includes('is ready')) { clearTimeout(timer); resolve(); } });
+    processHandle.once('exit', code => { clearTimeout(timer); reject(new Error(`Server exited ${code}`)); });
+  });
+}
+async function stop() { if (processHandle && processHandle.exitCode === null) await new Promise(resolve => { processHandle.once('exit', resolve); processHandle.kill(); }); }
+before(start);
+after(async () => { await stop(); rmSync(directory, { recursive: true, force: true }); });
+test('full local study workflow, source coverage, grading, review gates, persistence and deletion', async () => {
+  assert.equal((await api('/state')).data.settings.connected, false);
+  await api('/samples', {});
+  let state = (await api('/state')).data;
+  assert.equal(state.documents.length, 3);
+  const generation = await api('/questions/generate', { spex: 'A', set: 1, mode: 'sample', count: 3, difficulty: 'Foundation' });
+  assert.equal(generation.status, 200);
+  const q = generation.data.questions[0];
+  assert.equal('answer' in q, false); assert.equal('steps' in q, false);
+  const invalid = await api(`/questions/${q.id}/answer`, { answer: 'abc' });
+  assert.equal(invalid.status, 400);
+  const wrong = await api(`/questions/${q.id}/answer`, { answer: '-999' });
+  assert.equal(wrong.data.correct, false);
+  const right = await api(`/questions/${q.id}/answer`, { answer: String(wrong.data.expected) });
+  assert.equal(right.data.correct, true); assert.equal(right.data.firstAttempt, false);
+  state = (await api('/state')).data;
+  assert.equal(state.attempts.length, 1); assert.equal(state.attempts[0].correct, false);
+  await api(`/questions/${generation.data.questions[1].id}/solution`, {});
+  const review = await api('/reviews', { itemId: state.items[0].id, rating: 'good' });
+  assert.equal(review.status, 200);
+  const form = new FormData();
+  form.append('spex', 'B'); form.append('set', '3'); form.append('kind', 'Book');
+  const pdf = await PDFDocument.create(); pdf.addPage(); pdf.addPage();
+  form.append('files', new Blob([await pdf.save()], { type: 'application/pdf' }), 'two-pages.pdf');
+  const sourceText = 'Equilibrium: \\sum F_x = 0.\n'.repeat(1300);
+  form.append('files', new Blob([sourceText], { type: 'text/plain' }), 'long-notes.txt');
+  const uploaded = await api('/documents', form);
+  assert.equal(uploaded.status, 201); assert.equal(uploaded.data.accepted.length, 2);
+  const doc = uploaded.data.accepted[0];
+  assert.equal(doc.totalPages, 2); assert.equal(doc.spex, 'B'); assert.equal(doc.set, 3);
+  assert.equal(uploaded.data.accepted[1].totalPages, Math.ceil(sourceText.length / 12000));
+  state = (await api('/state')).data;
+  assert.equal(state.pages.filter(p => p.docId === doc.id).length, 2);
+  assert.ok(state.documents.every(d => !('storageName' in d)));
+  const blockedExtraction = await api(`/documents/${doc.id}/extract`, {});
+  assert.equal(blockedExtraction.status, 409);
+  assert.equal((await api(`/documents/${doc.id}/pages/1/review`, {})).status, 400);
+  const newFormula = { docId: doc.id, page: 1, title: 'Force balance', topic: 'Statics', latex: String.raw`\sum F_x = 0`, variables: [{ symbol: 'F_x', meaning: 'Horizontal force component', unit: 'N' }], conditions: 'Static equilibrium', uncertain: false, note: '', reviewed: true };
+  assert.equal((await api('/items', newFormula)).status, 201);
+  assert.equal((await api('/items', { ...newFormula, latex: String.raw`\frac{` })).status, 400);
+  assert.equal((await api('/items', { ...newFormula, page: 3 })).status, 400);
+  assert.equal((await api(`/documents/${doc.id}`, { spex: 'C', set: 4 }, 'PATCH')).status, 200);
+  state = (await api('/state')).data;
+  assert.equal(state.items.find(i => i.docId === doc.id).spex, 'C');
+  const fetched = await fetch(`http://127.0.0.1:${port}/api/documents/${doc.id}/source`);
+  assert.match(fetched.headers.get('content-type'), /application\/pdf/);
+  const badForm = new FormData(); badForm.append('spex', 'A'); badForm.append('set', '1'); badForm.append('files', new Blob(['not a pdf']), 'bad.pdf');
+  assert.equal((await api('/documents', badForm)).status, 400);
+  await stop(); await start();
+  state = (await api('/state')).data;
+  assert.equal(state.documents.length, 5); assert.equal(state.attempts.length, 2); assert.equal(state.reviews.length, 1);
+  assert.equal((await api(`/documents/${doc.id}`, undefined, 'DELETE')).status, 200);
+  state = (await api('/state')).data;
+  assert.equal(state.pages.some(p => p.docId === doc.id), false); assert.equal(state.items.some(i => i.docId === doc.id), false);
+});
+test('reject cross-origin mutations and invalid categories', async () => {
+  const response = await fetch(`http://127.0.0.1:${port}/api/samples`, { method: 'POST', headers: { Origin: 'https://unrelated.example' } });
+  assert.equal(response.status, 403);
+  const form = new FormData(); form.append('spex', 'Z'); form.append('set', '0'); form.append('files', new Blob(['x']), 'notes.txt');
+  assert.equal((await api('/documents', form)).status, 400);
+});
