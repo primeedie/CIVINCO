@@ -7,6 +7,11 @@ export const formulaSchema = z.object({
   title: z.string().min(1), topic: z.string().min(1), latex: z.string().min(1),
   variables: z.array(variableSchema), conditions: z.string(), uncertain: z.boolean(), note: z.string(),
 });
+export const webSourceSchema = z.object({ title: z.string().min(1), url: z.string().url() });
+export const repairSchema = formulaSchema.extend({
+  confidence: z.enum(['high', 'medium', 'low']),
+  reason: z.string().min(1),
+});
 export const conceptSchema = z.object({ title: z.string().min(1), topic: z.string().min(1), explanation: z.string().min(1) });
 export const extractionSchema = z.object({
   formulas: z.array(formulaSchema), concepts: z.array(conceptSchema), warnings: z.array(z.string()),
@@ -30,6 +35,22 @@ export const questionSchema = z.object({
   sourceIds: z.array(z.string()).min(1), diagram: diagramSchema,
 });
 export const generatedSchema = z.object({ questions: z.array(questionSchema).min(1).max(10) });
+export const problemBankSchema = z.object({
+  version: z.literal(1),
+  name: z.string().min(1).max(200).optional(),
+  spex: z.enum(['A', 'B', 'C']),
+  set: z.number().int().min(1).max(999),
+  questions: z.array(questionSchema.omit({ sourceIds: true }).extend({
+    diagram: diagramSchema.optional(),
+    diagramImage: z.object({
+      data: z.string().max(8_000_000).regex(/^data:image\/(?:png|jpeg);base64,[A-Za-z0-9+/]+={0,2}$/),
+      alt: z.string().min(1).max(300),
+      caption: z.string().max(500).default(''),
+      visualAid: z.boolean().default(true),
+    }).optional(),
+    steps: z.array(z.object({ text: z.string().min(1), latex: z.string().default('') })).min(1),
+  })).min(1).max(5000),
+});
 export function validLatex(latex) {
   try { katex.renderToString(latex, { throwOnError: true, trust: false, strict: 'error' }); return true; }
   catch { return false; }
@@ -50,6 +71,6 @@ export function reviewSchedule(previous, rating, now = Date.now()) {
   return { interval, due: new Date(now + (rating === 'again' ? 600_000 : interval * 86_400_000)).toISOString(), rating };
 }
 export function publicQuestion(q) {
-  const { answer, tolerance, steps, ...publicPart } = q;
-  return publicPart;
+  const { answer, tolerance, steps, diagramImage, pool: _pool, ...publicPart } = q;
+  return { ...publicPart, ...(diagramImage?.visualAid ? { diagram: { ...(q.diagram || { title: '', caption: '', lines: [], arrows: [], circles: [], rectangles: [], labels: [] }), image: { url: `/api/questions/${q.id}/diagram`, alt: diagramImage.alt, caption: diagramImage.caption } } } : {}) };
 }

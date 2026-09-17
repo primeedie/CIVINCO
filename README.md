@@ -1,6 +1,6 @@
 # CIVINCO for Milch
 
-A personal civil engineering integration / pre-board review companion. Built with React, TypeScript, Express, SQLite, KaTeX, and Google Gemini.
+A civil engineering integration / pre-board review companion. Built with React, TypeScript, Express, SQLite, KaTeX, and Google Gemini.
 
 ## Open the app
 
@@ -14,7 +14,17 @@ npm run build
 npm start
 ```
 
-For development, use `npm run dev`. Both modes serve the frontend and API at the same local address. The server binds to `127.0.0.1`; this is a single-user local app, not a publicly deployed multi-user service.
+For development, use `npm run dev`. Both modes serve the frontend and API at the same local address. The local server binds to `127.0.0.1`.
+
+## Shared access and device privacy
+
+Set `CIVINCO_ACCESS_PASSWORD` and a long random `CIVINCO_SESSION_SECRET` in `.env` to enable the shared access screen. The password itself is never sent to the browser bundle. A successful unlock creates a signed, `HttpOnly`, `SameSite=Lax` device cookie.
+
+- Existing course materials without an owner are the shared, read-only library.
+- New uploads, imported problem banks, active practice sets, answers, reviews, and progress belong to the device cookie that created them.
+- A device-specific Gemini key is encrypted with AES-256-GCM and kept in an `HttpOnly` cookie. It is not placed in client JavaScript, local storage, the public library, or Git.
+- Clearing site cookies creates a new device identity, so the browser can no longer reach data tied to the old identity. A second browser or phone likewise starts with separate private data.
+- The shared password is a lightweight gate for a small trusted study group. It is not a substitute for individual accounts when the app is opened to a larger audience.
 
 ## Your course structure
 
@@ -39,7 +49,7 @@ Every source and study entry has an examination and a numbered Set. Filters appl
 
 ## Connect AI
 
-Open **AI settings**, enter a Gemini API key and compatible model, then choose **Save & test connection**. Gemini powers first-page classification, equation/concept extraction, and generated practice with solutions and diagrams. A key entered in the UI is kept only in server memory until restart; it is not placed in browser storage, responses, or the client bundle.
+Open **AI settings**, use the built-in key tutorial, enter a Gemini API key and compatible model, then choose **Save & test connection**. Gemini powers first-page classification, equation/concept extraction, online formula repair, and generated practice with solutions and diagrams. A key entered in the UI is encrypted into an `HttpOnly` device cookie and can be removed from the same dialog.
 
 For persistent configuration, copy `.env.example` to `.env` and set:
 
@@ -47,6 +57,8 @@ For persistent configuration, copy `.env.example` to `.env` and set:
 GEMINI_API_KEY=your_key_here
 GEMINI_MODEL=gemini-3.6-flash
 PORT=4173
+CIVINCO_ACCESS_PASSWORD=choose_a_private_shared_password
+CIVINCO_SESSION_SECRET=generate_a_long_random_value
 ```
 
 Gemini 3.6 Flash supports visual/PDF input and structured outputs. Free mode sends each source page once. Question generation still uses a separate solution and diagram audit, so starter practice is the no-API alternative when conserving quota. Google API quotas and data policies apply. The app does not send uploaded files until you start extraction.
@@ -57,7 +69,7 @@ Official integration references: [Gemini document processing](https://ai.google.
 
 ## Data and recovery
 
-- `data/civinco.sqlite` stores categories, extraction inventory, formulas, concepts, questions, attempts, and recall schedules.
+- `data/civinco.sqlite` stores categories, extraction inventory, formulas, concepts, questions, attempts, recall schedules, and device ownership identifiers.
 - `data/uploads/` stores original files under generated names.
 - Back up the entire `data` folder **after stopping the app**. Keep your API key separately. `.env`, `data`, runtime files, and dependencies are excluded from Git.
 - Pause takes effect after an in-flight page finishes. Resume processes unfinished/failed pages and keeps successful results. After a restart, interrupted jobs are marked paused so you can resume explicitly.

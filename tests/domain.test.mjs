@@ -114,9 +114,42 @@ test('Gemini rejects malformed structured data after generation', async () => {
   );
   await assert.rejects(ai.extract([{ type: 'input_text', text: 'Source' }], 'Page 1'), /invalid page_extraction result/);
 });
+test('online formula repair uses page context, Google Search grounding, citations, and notation validation', async () => {
+  const calls = [];
+  const suggestion = {
+    title: 'Maximum deflection of a cantilever beam', topic: 'Beam deflections', latex: String.raw`\delta=\frac{PL^3}{3EI}`,
+    variables: [
+      { symbol: String.raw`\delta`, meaning: 'Maximum vertical deflection at the free end', unit: 'm' },
+      { symbol: 'P', meaning: 'Concentrated load at the free end', unit: 'N' },
+      { symbol: 'L', meaning: 'Cantilever length', unit: 'm' },
+      { symbol: 'E', meaning: 'Modulus of elasticity', unit: 'Pa' },
+      { symbol: 'I', meaning: 'Second moment of area', unit: String.raw`m^4` },
+    ], conditions: 'Prismatic Euler-Bernoulli cantilever with a point load at the free end', uncertain: false, note: '', confidence: 'high', reason: 'The page geometry and standard reference agree.',
+  };
+  const ai = createAI({ geminiApiKey: 'test-key', model: 'test-model' }, { geminiClient: () => ({ models: { generateContent: async input => {
+    calls.push(input);
+    return { text: JSON.stringify(suggestion), candidates: [{ groundingMetadata: { webSearchQueries: ['cantilever point load deflection variables'], searchEntryPoint: { renderedContent: '<div>Search suggestions</div>' }, groundingChunks: [{ web: { uri: 'https://example.edu/beams', title: 'University beam tables' } }] } }] };
+  } } }) });
+  const result = await ai.repair({ title: suggestion.title, latex: suggestion.latex, variables: [] }, [], [{ type: 'input_text', text: 'Original source page' }], 'Page 6');
+  assert.deepEqual(calls[0].config.tools, [{ googleSearch: {} }]);
+  assert.equal(calls[0].contents[0].text, 'Original source page');
+  assert.equal(result.variables.length, 5);
+  assert.deepEqual(result.sources, [{ title: 'University beam tables', url: 'https://example.edu/beams' }]);
+  assert.deepEqual(result.searchQueries, ['cantilever point load deflection variables']);
+  assert.equal(result.searchEntryPoint, '<div>Search suggestions</div>');
+});
 test('AI generation rejects invented source IDs and failed independent solution checks', async () => {
   const q = { title: 'Force', topic: 'Statics', prompt: 'Find force.', answer: 2, unit: 'N', tolerance: .01, sourceIds: ['fake'], steps: [{ text: 'Compute.', latex: 'F=2' }], diagram };
   const fake = replies => createAI({ geminiApiKey: 'test', model: 'test' }, { geminiClient: () => ({ models: { generateContent: async () => ({ text: JSON.stringify(replies.shift()) }) } }) });
   await assert.rejects(fake([{ questions: [q] }]).generate([{ id: 'real' }], 1, 'Foundation'), /source or notation/);
   await assert.rejects(fake([{ questions: [{ ...q, sourceIds: ['real'] }] }, { checks: [{ index: 0, valid: false, reason: 'Wrong result' }] }]).generate([{ id: 'real' }], 1, 'Foundation'), /independent solution check/);
+});
+test('source problem mode preserves uploaded problems in a single model pass', async () => {
+  const calls = [];
+  const question = { title: 'Cantilever deflection', topic: 'Beam deflections', prompt: 'A cantilever of length 2 m carries a 5 kN end load. Find the free-end deflection.', answer: 0.004, unit: 'm', tolerance: 0.0001, sourceIds: ['source-formula'], steps: [{ text: 'Apply the stated cantilever equation.', latex: String.raw`\delta=\frac{PL^3}{3EI}` }], diagram };
+  const ai = createAI({ geminiApiKey: 'test', model: 'test' }, { geminiClient: () => ({ models: { generateContent: async input => { calls.push(input); return { text: JSON.stringify({ questions: [question] }) }; } } }) });
+  const result = await ai.sourceQuestions([{ document: 'module.pdf', page: 6, entries: [{ id: 'source-formula' }] }], [{ type: 'input_text', text: 'Visible source problem' }], 1);
+  assert.equal(calls.length, 1);
+  assert.match(calls[0].config.systemInstruction, /preserve its wording, given values, units/);
+  assert.equal(result[0].prompt, question.prompt);
 });

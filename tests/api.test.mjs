@@ -14,7 +14,7 @@ async function api(url, body, method) {
   return { status: response.status, data: await response.json() };
 }
 async function start() {
-  processHandle = spawn(process.execPath, ['server/index.mjs', '--production'], { env: { ...process.env, PORT: String(port), CIVINCO_DATA_DIR: directory, GEMINI_API_KEY: '' }, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
+  processHandle = spawn(process.execPath, ['server/index.mjs', '--production'], { env: { ...process.env, PORT: String(port), CIVINCO_DATA_DIR: directory, GEMINI_API_KEY: '', CIVINCO_ACCESS_PASSWORD: '', CIVINCO_SESSION_SECRET: 'api-test-secret' }, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
   await new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error('Server startup timed out')), 15000);
     processHandle.once('error', reject);
@@ -39,7 +39,7 @@ test('full local study workflow, source coverage, grading, review gates, persist
   const wrong = await api(`/questions/${q.id}/answer`, { answer: '-999' });
   assert.equal(wrong.data.correct, false);
   const right = await api(`/questions/${q.id}/answer`, { answer: String(wrong.data.expected) });
-  assert.equal(right.data.correct, true); assert.equal(right.data.firstAttempt, false);
+  assert.equal(right.status, 409);
   state = (await api('/state')).data;
   assert.equal(state.attempts.length, 1); assert.equal(state.attempts[0].correct, false);
   await api(`/questions/${generation.data.questions[1].id}/solution`, {});
@@ -61,6 +61,33 @@ test('full local study workflow, source coverage, grading, review gates, persist
   assert.ok(state.documents.every(d => !('storageName' in d)));
   const blockedExtraction = await api(`/documents/${doc.id}/extract`, {});
   assert.equal(blockedExtraction.status, 409);
+  const bankForm = new FormData();
+  bankForm.append('file', new Blob([JSON.stringify({ version: 1, name: 'Permanent PSAD Bank', spex: 'A', set: 7, questions: [{ title: 'Imported force problem', topic: 'Statics', prompt: 'A 12 N horizontal force acts on a body. Determine the force magnitude.', answer: 12, unit: 'N', tolerance: 0.01, steps: [{ text: 'Read the stated magnitude.', latex: 'F=12\\ \\mathrm{N}' }] }] })], { type: 'application/json' }), 'bank.json');
+  const bankImport = await api('/problem-banks', bankForm);
+  assert.equal(bankImport.status, 201); assert.equal(bankImport.data.imported, 1); assert.equal(bankImport.data.skipped, 0);
+  const bankDoc = bankImport.data.document, bankQuestion = bankImport.data.questions[0];
+  assert.equal(bankQuestion.mode, 'bank'); assert.equal('answer' in bankQuestion, false); assert.equal(bankQuestion.sourceDocId, bankDoc.id);
+  state = (await api('/state')).data;
+  assert.equal(state.questions.some(question => question.id === bankQuestion.id), false);
+  const unconfirmedReplacement = await api('/questions/generate', { spex: 'A', set: 7, mode: 'bank', count: 1, difficulty: 'Foundation' });
+  assert.equal(unconfirmedReplacement.status, 409);
+  const bankDraw = await api('/questions/generate', { spex: 'A', set: 7, mode: 'bank', count: 1, difficulty: 'Foundation', replace: true });
+  assert.equal(bankDraw.status, 200); assert.equal(bankDraw.data.questions.length, 1);
+  const bankSessionQuestion = bankDraw.data.questions[0];
+  assert.equal(bankSessionQuestion.mode, 'bank'); assert.notEqual(bankSessionQuestion.id, bankQuestion.id);
+  assert.match((await fetch(`http://127.0.0.1:${port}/api/problem-banks/template`)).headers.get('content-type'), /application\/json/);
+  const pixel = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAF/gL+XwVdWQAAAABJRU5ErkJggg==';
+  const imageBankForm = new FormData();
+  imageBankForm.append('file', new Blob([JSON.stringify({ version: 1, name: 'Ordered illustrated bank', spex: 'A', set: 8, questions: [
+    { title: 'First member', topic: 'Trusses', prompt: 'Using the shown truss, determine member 1.', answer: 1, unit: 'kN', tolerance: 0.01, steps: [{ text: 'Source answer.', latex: '' }], diagramImage: { data: pixel, alt: 'Source truss diagram', caption: 'Shared figure.' } },
+    { title: 'Second member', topic: 'Trusses', prompt: 'Using the shown truss, determine member 2.', answer: 2, unit: 'kN', tolerance: 0.01, steps: [{ text: 'Source answer.', latex: '' }], diagramImage: { data: pixel, alt: 'Source truss diagram', caption: 'Shared figure.' } },
+  ] })], { type: 'application/json' }), 'illustrated-bank.json');
+  const imageBank = await api('/problem-banks', imageBankForm);
+  assert.equal(imageBank.status, 201); assert.deepEqual(imageBank.data.questions.map(question => question.sourcePage), [1, 2]);
+  assert.ok(imageBank.data.questions.every(question => question.diagram.image.url.endsWith('/diagram')));
+  const sourceDiagram = await fetch(`http://127.0.0.1:${port}${imageBank.data.questions[1].diagram.image.url}`);
+  assert.equal(sourceDiagram.status, 200); assert.match(sourceDiagram.headers.get('content-type'), /image\/png/);
+  assert.equal((await api(`/documents/${imageBank.data.document.id}`, undefined, 'DELETE')).status, 200);
   assert.equal((await api(`/documents/${doc.id}/pages/1/review`, {})).status, 400);
   const newFormula = { docId: doc.id, page: 1, title: 'Force balance', topic: 'Statics', latex: String.raw`\sum F_x = 0`, variables: [{ symbol: 'F_x', meaning: 'Horizontal force component', unit: 'N' }], conditions: 'Static equilibrium', uncertain: false, note: '', reviewed: true };
   assert.equal((await api('/items', newFormula)).status, 201);
@@ -75,7 +102,12 @@ test('full local study workflow, source coverage, grading, review gates, persist
   assert.equal((await api('/documents', badForm)).status, 400);
   await stop(); await start();
   state = (await api('/state')).data;
-  assert.equal(state.documents.length, 5); assert.equal(state.attempts.length, 2); assert.equal(state.reviews.length, 1);
+  assert.equal(state.documents.length, 6); assert.equal(state.attempts.length, 2); assert.equal(state.reviews.length, 1);
+  assert.equal(state.questions.some(question => question.id === bankQuestion.id), false);
+  assert.equal(state.questions.some(question => question.id === bankSessionQuestion.id && question.mode === 'bank'), true);
+  assert.equal((await api(`/documents/${bankDoc.id}`, undefined, 'DELETE')).status, 200);
+  state = (await api('/state')).data;
+  assert.equal(state.questions.some(question => question.id === bankQuestion.id), false);
   assert.equal((await api(`/documents/${doc.id}`, undefined, 'DELETE')).status, 200);
   state = (await api('/state')).data;
   assert.equal(state.pages.some(p => p.docId === doc.id), false); assert.equal(state.items.some(i => i.docId === doc.id), false);

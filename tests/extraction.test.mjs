@@ -46,7 +46,7 @@ test('PDF extraction splits every page, preserves completed results on retry, ga
   await new Promise(resolve => mock.listen(0, '127.0.0.1', resolve));
   const mockPort = mock.address().port;
   const port = 14175;
-  const child = spawn(process.execPath, ['server/index.mjs', '--production'], { env: { ...process.env, PORT: String(port), CIVINCO_DATA_DIR: directory, GEMINI_API_KEY: 'test-fixture-only', GEMINI_MODEL: 'gemini-test', GEMINI_BASE_URL: `http://127.0.0.1:${mockPort}` }, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
+  const child = spawn(process.execPath, ['server/index.mjs', '--production'], { env: { ...process.env, PORT: String(port), CIVINCO_DATA_DIR: directory, GEMINI_API_KEY: 'test-fixture-only', GEMINI_MODEL: 'gemini-test', GEMINI_BASE_URL: `http://127.0.0.1:${mockPort}`, CIVINCO_ACCESS_PASSWORD: '', CIVINCO_SESSION_SECRET: 'extraction-test-secret' }, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
   const call = async (url, body, method) => {
     const response = await fetch(`http://127.0.0.1:${port}/api${url}`, { method: method || (body ? 'POST' : 'GET'), headers: body instanceof FormData ? {} : { 'Content-Type': 'application/json' }, body: body ? body instanceof FormData ? body : JSON.stringify(body) : undefined });
     return { status: response.status, data: await response.json() };

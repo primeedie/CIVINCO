@@ -34,6 +34,7 @@ export function Empty({ icon, title, text, action }: { icon: ReactNode; title: s
 }
 export function SourceLink({ doc, page }: { doc?: Source; page: number }) {
   if (!doc) return <span className="source-line">Source unavailable</span>;
-  return doc.sample ? <span className="source-line"><FileText size={13} /> Starter reference · illustrative content</span> : <a className="source-line" href={`/api/documents/${doc.id}/source#page=${page}`} target="_blank" rel="noreferrer"><FileText size={13} /><span>{doc.name} · {['.txt', '.md'].includes(doc.extension || '') ? 'section' : 'p.'} {page}</span><ChevronRight size={13} /></a>;
+  const label = doc.extension === '.json' ? 'entry' : ['.txt', '.md'].includes(doc.extension || '') ? 'section' : 'p.';
+  return doc.sample ? <span className="source-line"><FileText size={13} /> Starter reference · illustrative content</span> : <a className="source-line" href={`/api/documents/${doc.id}/source${doc.extension === '.pdf' ? `#page=${page}` : ''}`} target="_blank" rel="noreferrer"><FileText size={13} /><span>{doc.name} · {label} {page}</span><ChevronRight size={13} /></a>;
 }
 export function Status({ children, success = false }: { children: ReactNode; success?: boolean }) { return <div role="status" className={`notice ${success ? 'success' : ''}`}>{success ? <Check size={17} /> : <AlertCircle size={17} />}<span>{children}</span></div>; }
