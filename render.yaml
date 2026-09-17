@@ -1,0 +1,28 @@
+services:
+  - type: web
+    name: civinco-reviewer
+    runtime: node
+    plan: free
+    autoDeployTrigger: commit
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: 24.21.0
+      - key: NODE_ENV
+        value: production
+      - key: CIVINCO_DATA_DIR
+        value: /tmp/civinco
+      - key: GEMINI_MODEL
+        value: gemini-3.6-flash
+      - key: SUPABASE_BUCKET
+        value: civinco-private
+      - key: CIVINCO_ACCESS_PASSWORD
+        sync: false
+      - key: CIVINCO_SESSION_SECRET
+        generateValue: true
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SECRET_KEY
+        sync: false

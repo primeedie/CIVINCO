@@ -12,7 +12,8 @@
     "start": "node server/index.mjs --production",
     "test": "node --test tests/*.test.mjs",
     "test:browser": "playwright test",
-    "verify:secrets": "node tools/verify-secrets.mjs"
+    "verify:secrets": "node tools/verify-secrets.mjs",
+    "migrate:supabase": "node tools/migrate-to-supabase.mjs"
   },
   "dependencies": {
     "@google/genai": "^2.22.0",

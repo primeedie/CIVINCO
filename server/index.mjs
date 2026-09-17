@@ -11,6 +11,7 @@ import { z } from 'zod';
 import { createStore } from './store.mjs';
 import { createAI } from './ai.mjs';
 import { createAccess } from './access.mjs';
+import { createCloudPersistence } from './cloud.mjs';
 import { categorySchema, formulaSchema, gradeAnswer, problemBankSchema, reviewSchedule, publicQuestion, validLatex, webSourceSchema } from './domain.mjs';
 import { addSamples, sampleQuestions } from './samples.mjs';
 
@@ -18,7 +19,11 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const dataDir = path.resolve(process.env.CIVINCO_DATA_DIR || path.join(root, 'data'));
 const uploadDir = path.join(dataDir, 'uploads');
 mkdirSync(uploadDir, { recursive: true });
-const store = createStore(dataDir);
+const cloud = createCloudPersistence({ url: process.env.SUPABASE_URL, secretKey: process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY, bucket: process.env.SUPABASE_BUCKET || 'civinco-private' });
+const cloudRecords = await cloud.loadRecords();
+let store;
+store = createStore(dataDir, { initialRecords: cloudRecords, onChange: () => cloud.schedule() });
+cloud.connect(() => store.snapshot());
 const localSettings = {
   geminiApiKey: process.env.GEMINI_API_KEY || '',
   model: process.env.GEMINI_MODEL || 'gemini-3.6-flash',
@@ -30,8 +35,8 @@ app.disable('x-powered-by');
 app.use((req, res, next) => {
   res.set('X-Content-Type-Options', 'nosniff');
   res.set('Referrer-Policy', 'same-origin');
-  // This is a local personal app. Reject cross-origin writes and DNS rebinding.
-  if (!process.env.VERCEL && !process.env.CIVINCO_PUBLIC_HOST && !['127.0.0.1', 'localhost', '[::1]', '::1'].includes(req.hostname)) return res.status(403).json({ error: 'Local access only.' });
+  // Local mode rejects DNS rebinding; hosted platforms provide their own public hostname.
+  if (!process.env.VERCEL && !process.env.RENDER && !process.env.CIVINCO_PUBLIC_HOST && !['127.0.0.1', 'localhost', '[::1]', '::1'].includes(req.hostname)) return res.status(403).json({ error: 'Local access only.' });
   if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method) && req.headers.origin) {
     try { if (new URL(req.headers.origin).host !== req.headers.host) return res.status(403).json({ error: 'Cross-origin writes are not allowed.' }); }
     catch { return res.status(403).json({ error: 'Cross-origin writes are not allowed.' }); }
@@ -40,6 +45,7 @@ app.use((req, res, next) => {
 });
 app.use(express.json({ limit: '2mb' }));
 app.get('/api/access/status', (req, res) => res.json({ locked: access.enabled && !access.status(req) }));
+app.get('/api/health', (_req, res) => res.json({ ok: true, persistence: cloud.enabled ? 'supabase' : 'local' }));
 app.post('/api/access/unlock', (req, res) => {
   const { password } = z.object({ password: z.string().min(1).max(200) }).parse(req.body);
   const session = access.unlock(req, password);
@@ -49,6 +55,24 @@ app.post('/api/access/unlock', (req, res) => {
 app.post('/api/access/logout', (req, res) => { res.setHeader('Set-Cookie', [access.clearCookie(req), access.clearPrivateCookie(req, 'civinco_ai')]); res.json({ ok: true }); });
 app.use('/api', (req, res, next) => access.middleware(req, res, next));
 const upload = multer({ dest: uploadDir, limits: { fileSize: 100 * 1024 * 1024, files: 20 } });
+async function readAsset(storageName) {
+  try { return await readFile(path.join(uploadDir, storageName)); }
+  catch (error) {
+    if (error.code !== 'ENOENT' || !cloud.enabled) throw error;
+    const bytes = await cloud.getAsset(storageName);
+    if (!bytes) throw fail('Stored file not found.', 404);
+    await writeFile(path.join(uploadDir, storageName), bytes);
+    return bytes;
+  }
+}
+async function saveAsset(storageName, bytes, mime = 'application/octet-stream') {
+  await writeFile(path.join(uploadDir, storageName), bytes);
+  await cloud.putAsset(storageName, bytes, mime);
+}
+async function removeAssets(names) {
+  await Promise.all(names.filter(Boolean).map(name => unlink(path.join(uploadDir, name)).catch(() => {})));
+  await cloud.removeAssets(names.filter(Boolean));
+}
 const fail = (message, status = 400) => Object.assign(new Error(message), { status });
 const getDoc = id => { const doc = store.get('documents', id); if (!doc) throw fail('File not found.', 404); return doc; };
 const getItem = id => { const item = store.get('items', id); if (!item) throw fail('Entry not found.', 404); return item; };
@@ -153,12 +177,13 @@ app.post('/api/problem-banks', upload.single('file'), async (req, res) => {
         if (!isPng && !isJpeg) throw fail(`Question ${index + 1} has an invalid diagram image.`);
         if (imageBytes.length > 5 * 1024 * 1024) throw fail(`Question ${index + 1} has a diagram larger than 5 MB.`);
         const storageName = `${id}-${questionId}.${isPng ? 'png' : 'jpg'}`;
-        await writeFile(path.join(uploadDir, storageName), imageBytes);
+        await saveAsset(storageName, imageBytes, isPng ? 'image/png' : 'image/jpeg');
         writtenAssets.push(storageName);
         storedImage = { storageName, mime: isPng ? 'image/png' : 'image/jpeg', alt: diagramImage.alt, caption: diagramImage.caption, visualAid: diagramImage.visualAid };
       }
       return { ...content, diagram: question.diagram || emptyDiagram, ...(storedImage ? { diagramImage: storedImage } : {}), id: questionId, ownerId: req.deviceId, spex: bank.spex, set: bank.set, sourceIds: [], sourceDocId: id, sourcePage: index + 1, mode: 'bank', pool: true, createdAt };
     }));
+    await cloud.putAsset(file.filename, bytes, 'application/json');
     store.transaction(() => {
       store.put('documents', doc);
       questions.forEach((question, index) => {
@@ -168,8 +193,7 @@ app.post('/api/problem-banks', upload.single('file'), async (req, res) => {
     });
     res.status(201).json({ imported: questions.length, skipped, document: sanitizedDoc(doc, req), questions: questions.map(publicQuestion) });
   } catch (error) {
-    await unlink(file.path).catch(() => {});
-    await Promise.all(writtenAssets.map(name => unlink(path.join(uploadDir, name)).catch(() => {})));
+    await removeAssets([file.filename, ...writtenAssets]);
     throw error;
   }
 });
@@ -211,12 +235,14 @@ app.post('/api/documents', upload.array('files', 20), async (req, res) => {
       }
       const id = randomUUID();
       const doc = { id, ownerId: req.deviceId, name: file.originalname, ...category, autoCategorize, categoryDetected: !autoCategorize, kind, sample: false, size: file.size, totalPages, extension: ext, storageName: file.filename, status: 'stored', createdAt: new Date().toISOString(), error: '' };
+      const mime = { '.pdf': 'application/pdf', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.txt': 'text/plain', '.md': 'text/markdown' }[ext];
+      await cloud.putAsset(file.filename, bytes, mime);
       store.transaction(() => {
         store.put('documents', doc);
         for (let page = 1; page <= totalPages; page++) store.put('pages', { id: `${id}:${page}`, docId: id, page, status: 'pending', reviewed: false, warnings: [], error: '', ...(chunks.length ? { text: chunks[page - 1] } : {}) });
       });
       accepted.push(sanitizedDoc(doc, req));
-    } catch (error) { errors.push({ name: file.originalname, error: safeError(error) }); await unlink(file.path).catch(() => {}); }
+    } catch (error) { errors.push({ name: file.originalname, error: safeError(error) }); await removeAssets([file.filename]); }
   }
   res.status(accepted.length ? 201 : 400).json({ accepted, errors, ...(!accepted.length ? { error: errors.map(e => `${e.name}: ${e.error}`).join('\n') } : {}) });
 });
@@ -225,12 +251,12 @@ app.get('/api/documents/:id/source', async (req, res) => {
   const doc = requireVisibleDoc(req.params.id, req);
   if (doc.sample) throw fail('Starter references have no uploaded source.', 404);
   const mime = { '.pdf': 'application/pdf', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.txt': 'text/plain', '.md': 'text/plain', '.json': 'application/json' }[doc.extension];
-  res.type(mime).sendFile(path.join(uploadDir, doc.storageName));
+  res.type(mime).send(await readAsset(doc.storageName));
 });
-app.get('/api/questions/:id/diagram', (req, res) => {
+app.get('/api/questions/:id/diagram', async (req, res) => {
   const question = requireVisibleQuestion(req.params.id, req);
   if (!question.diagramImage) throw fail('This problem has no source diagram.', 404);
-  res.type(question.diagramImage.mime).sendFile(path.join(uploadDir, question.diagramImage.storageName));
+  res.type(question.diagramImage.mime).send(await readAsset(question.diagramImage.storageName));
 });
 app.patch('/api/documents/:id', (req, res) => {
   const doc = requireEditableDoc(req.params.id, req), category = categorySchema.parse(req.body);
@@ -258,8 +284,7 @@ app.delete('/api/documents/:id', async (req, res) => {
     store.put('meta', { ...active, questionIds: active.questionIds.filter(id => !qIds.has(id)) });
     store.remove('documents', doc.id);
   });
-  if (doc.storageName) await unlink(path.join(uploadDir, doc.storageName)).catch(() => {});
-  await Promise.all(diagramAssets.map(name => unlink(path.join(uploadDir, name)).catch(() => {})));
+  await removeAssets([doc.storageName, ...diagramAssets]);
   res.json({ ok: true });
 });
 
@@ -267,7 +292,7 @@ const queue = [];
 let running = false, activeDoc = null;
 const unfinished = id => store.all('pages').some(p => p.docId === id && p.status !== 'extracted');
 async function sourcePageContent(doc, pageNumber, suppliedBytes, suppliedPdf) {
-  const bytes = suppliedBytes || await readFile(path.join(uploadDir, doc.storageName));
+  const bytes = suppliedBytes || await readAsset(doc.storageName);
   const page = store.get('pages', `${doc.id}:${pageNumber}`);
   if (!page) throw fail('Source page not found.', 404);
   const pdf = suppliedPdf || (doc.extension === '.pdf' ? await PDFDocument.load(bytes) : null);
@@ -299,7 +324,7 @@ async function processQueue() {
       updateDoc(id, { status: 'extracting', error: '' });
       try {
         let doc = getDoc(id);
-        const bytes = await readFile(path.join(uploadDir, doc.storageName));
+        const bytes = await readAsset(doc.storageName);
         const pdf = doc.extension === '.pdf' ? await PDFDocument.load(bytes) : null;
         const pages = store.all('pages').filter(p => p.docId === id && p.status !== 'extracted').sort((a, b) => a.page - b.page);
         for (const page of pages) {
@@ -522,6 +547,7 @@ if (process.argv.includes('--production')) {
   const vite = await createServer({ root, server: { middlewareMode: true }, appType: 'spa' });
   app.use(vite.middlewares);
 }
-const server = app.listen(port, '127.0.0.1', () => console.log(`CIVINCO for Milch is ready at http://localhost:${port}`));
+const host = process.env.RENDER || process.env.CIVINCO_PUBLIC_HOST ? '0.0.0.0' : '127.0.0.1';
+const server = app.listen(port, host, () => console.log(`CIVINCO for Milch is ready on ${host}:${port}`));
 server.requestTimeout = 600_000;
-for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => { server.close(); store.close(); process.exit(0); });
+for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => { server.close(async () => { await cloud.flush().catch(() => {}); store.close(); process.exit(0); }); });
