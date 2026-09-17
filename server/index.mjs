@@ -54,7 +54,7 @@ app.post('/api/access/unlock', (req, res) => {
 });
 app.post('/api/access/logout', (req, res) => { res.setHeader('Set-Cookie', [access.clearCookie(req), access.clearPrivateCookie(req, 'civinco_ai')]); res.json({ ok: true }); });
 app.use('/api', (req, res, next) => access.middleware(req, res, next));
-const upload = multer({ dest: uploadDir, limits: { fileSize: 100 * 1024 * 1024, files: 20 } });
+const upload = multer({ dest: uploadDir, limits: { fileSize: 50 * 1024 * 1024, files: 20 } });
 async function readAsset(storageName) {
   try { return await readFile(path.join(uploadDir, storageName)); }
   catch (error) {
@@ -145,7 +145,7 @@ app.post('/api/problem-banks', upload.single('file'), async (req, res) => {
   try {
     if (path.extname(file.originalname).toLowerCase() !== '.json') throw fail('Problem banks must use the .json template.');
     const bytes = await readFile(file.path);
-    if (bytes.length > 100 * 1024 * 1024) throw fail('Problem-bank files must be 100 MB or smaller.');
+    if (bytes.length > 50 * 1024 * 1024) throw fail('Problem-bank files must be 50 MB or smaller.');
     let raw;
     try { raw = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)); }
     catch { throw fail('The problem bank is not valid UTF-8 JSON.'); }
@@ -536,7 +536,7 @@ app.post('/api/reviews', (req, res) => {
 app.use('/api', (_req, res) => res.status(404).json({ error: 'Endpoint not found.' }));
 app.use((error, _req, res, _next) => {
   if (error instanceof z.ZodError) return res.status(400).json({ error: error.issues.map(i => `${i.path.join('.')}: ${i.message}`).join('; ') });
-  if (error instanceof multer.MulterError) return res.status(400).json({ error: error.code === 'LIMIT_FILE_SIZE' ? 'Each file must be 100 MB or smaller.' : error.message });
+  if (error instanceof multer.MulterError) return res.status(400).json({ error: error.code === 'LIMIT_FILE_SIZE' ? 'Each file must be 50 MB or smaller.' : error.message });
   res.status(error.status && error.status >= 400 && error.status < 600 ? error.status : 500).json({ error: safeError(error) });
 });
 if (process.argv.includes('--production')) {

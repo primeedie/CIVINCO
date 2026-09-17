@@ -14,9 +14,9 @@ export function createCloudPersistence({ url = '', secretKey = '', bucket = 'civ
   }
   async function ensureBucket() {
     if (!enabled) return;
-    const existing = await request(`${base}/storage/v1/bucket/${encodeURIComponent(bucket)}`, {}, [404]);
-    if (existing.status !== 404) return;
-    await request(`${base}/storage/v1/bucket`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: bucket, name: bucket, public: false, file_size_limit: 104857600 }) });
+    const existing = await request(`${base}/storage/v1/bucket/${encodeURIComponent(bucket)}`, {}, [400, 404]);
+    if (existing.ok) return;
+    await request(`${base}/storage/v1/bucket`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: bucket, name: bucket, public: false, file_size_limit: 52428800 }) });
   }
   async function put(name, bytes, contentType = 'application/octet-stream') {
     if (!enabled) return;

@@ -14,7 +14,7 @@ async function api(url, body, method) {
   return { status: response.status, data: await response.json() };
 }
 async function start() {
-  processHandle = spawn(process.execPath, ['server/index.mjs', '--production'], { env: { ...process.env, PORT: String(port), CIVINCO_DATA_DIR: directory, GEMINI_API_KEY: '', CIVINCO_ACCESS_PASSWORD: '', CIVINCO_SESSION_SECRET: 'api-test-secret' }, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
+  processHandle = spawn(process.execPath, ['server/index.mjs', '--production'], { env: { ...process.env, PORT: String(port), CIVINCO_DATA_DIR: directory, GEMINI_API_KEY: '', SUPABASE_URL: '', SUPABASE_SECRET_KEY: '', SUPABASE_SERVICE_ROLE_KEY: '', CIVINCO_ACCESS_PASSWORD: '', CIVINCO_SESSION_SECRET: 'api-test-secret' }, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
   await new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error('Server startup timed out')), 15000);
     processHandle.once('error', reject);

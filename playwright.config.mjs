@@ -13,7 +13,7 @@ export default defineConfig({
   webServer: {
     command: 'node server/index.mjs --production',
     url: 'http://127.0.0.1:14174',
-    env: { PORT: '14174', CIVINCO_DATA_DIR: `test-results/browser-data-${Date.now()}`, GEMINI_API_KEY: '', CIVINCO_ACCESS_PASSWORD: '', CIVINCO_SESSION_SECRET: 'browser-test-secret' },
+    env: { PORT: '14174', CIVINCO_DATA_DIR: `test-results/browser-data-${Date.now()}`, GEMINI_API_KEY: '', SUPABASE_URL: '', SUPABASE_SECRET_KEY: '', SUPABASE_SERVICE_ROLE_KEY: '', CIVINCO_ACCESS_PASSWORD: '', CIVINCO_SESSION_SECRET: 'browser-test-secret' },
     reuseExistingServer: false,
     timeout: 20000,
   },

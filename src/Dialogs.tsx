@@ -9,9 +9,9 @@ export function UploadDialog({ initialSpex, initialSet, onClose, onSaved }: { in
   const [files, setFiles] = useState<File[]>([]), [busy, setBusy] = useState(false), [error, setError] = useState(''), [drag, setDrag] = useState(false);
   const input = useRef<HTMLInputElement>(null);
   function add(incoming: File[]) {
-    const valid = incoming.filter(f => /\.(pdf|png|jpe?g|txt|md)$/i.test(f.name) && f.size <= 100 * 1024 * 1024);
+    const valid = incoming.filter(f => /\.(pdf|png|jpe?g|txt|md)$/i.test(f.name) && f.size <= 50 * 1024 * 1024);
     setFiles(current => [...current, ...valid.filter(f => !current.some(c => c.name === f.name && c.size === f.size))].slice(0, 20));
-    if (valid.length !== incoming.length) setError('Some files were skipped. Use PDF, PNG, JPG, TXT, or MD, up to 100 MB each.');
+    if (valid.length !== incoming.length) setError('Some files were skipped. Use PDF, PNG, JPG, TXT, or MD, up to 50 MB each.');
     else if (incoming.length + files.length > 20) setError('Upload up to 20 files at a time.'); else setError('');
   }
   async function submit(e: React.FormEvent) {
@@ -25,7 +25,7 @@ export function UploadDialog({ initialSpex, initialSet, onClose, onSaved }: { in
     } catch (e) { setError((e as Error).message); } finally { setBusy(false); }
   }
   return <Modal title="Upload materials" onClose={() => { if (!busy) onClose(); }}><p className="modal-intro">Add up to 20 course files.</p><form onSubmit={submit}>
-    <div className={`dropzone ${drag ? 'dragging' : ''}`} onDragOver={e => { e.preventDefault(); setDrag(true); }} onDragLeave={() => setDrag(false)} onDrop={e => { e.preventDefault(); setDrag(false); if (!busy) add(Array.from(e.dataTransfer.files)); }}><Upload size={30} /><strong>Drop your study materials here</strong><span>or <button type="button" className="text-button" disabled={busy} onClick={() => input.current?.click()}>browse files</button></span><small>PDF, PNG, JPG, TXT, MD · 100 MB each · Up to 20 files</small><input ref={input} type="file" accept=".pdf,.png,.jpg,.jpeg,.txt,.md" multiple hidden onChange={e => { add(Array.from(e.target.files || [])); e.target.value = ''; }} /></div>
+    <div className={`dropzone ${drag ? 'dragging' : ''}`} onDragOver={e => { e.preventDefault(); setDrag(true); }} onDragLeave={() => setDrag(false)} onDrop={e => { e.preventDefault(); setDrag(false); if (!busy) add(Array.from(e.dataTransfer.files)); }}><Upload size={30} /><strong>Drop your study materials here</strong><span>or <button type="button" className="text-button" disabled={busy} onClick={() => input.current?.click()}>browse files</button></span><small>PDF, PNG, JPG, TXT, MD · 50 MB each · Up to 20 files</small><input ref={input} type="file" accept=".pdf,.png,.jpg,.jpeg,.txt,.md" multiple hidden onChange={e => { add(Array.from(e.target.files || [])); e.target.value = ''; }} /></div>
     {!!files.length && <div className="selected-files">{files.map((file, n) => <div key={`${file.name}-${n}`}><FileText size={17} /><span>{file.name}<small>{(file.size / 1024 / 1024).toFixed(2)} MB</small></span><button disabled={busy} type="button" className="icon-button" aria-label={`Remove ${file.name}`} onClick={() => setFiles(files.filter((_, i) => i !== n))}><X size={16} /></button></div>)}</div>}
     <label className="check-label"><input type="checkbox" checked={autoCategorize} onChange={e => setAutoCategorize(e.target.checked)} /> Detect SPEX and Set from each file’s first page</label>
     <div className="form-grid">{!autoCategorize && <><label>Examination<select value={spex} onChange={e => setSpex(e.target.value as Spex)}>{(Object.keys(SPEX) as Spex[]).map(s => <option key={s} value={s}>SPEX {s} · {SPEX[s].code}</option>)}</select></label><label>Set number<input type="number" required min={1} max={999} value={set} onChange={e => setSet(Number(e.target.value))} /></label></>}<label>Material type<select value={kind} onChange={e => setKind(e.target.value)}>{['Module', 'Book', 'Notes', 'Exam'].map(k => <option key={k}>{k}</option>)}</select></label></div>
