@@ -10,13 +10,63 @@ export async function api<T = { ok: boolean }>(url: string, body?: unknown, meth
   if (!response.ok) throw new Error(result.error || 'Something went wrong. Try again.');
   return result;
 }
-export function MathText({ latex, block = false }: { latex: string; block?: boolean }) {
-  const marker = `component-${useId().replace(/:/g, '')}`;
+function VectorContextDiagram({ latex }: { latex: string }) {
+  const id = useId().replace(/:/g, '');
+  const marker = `vector-${id}`;
+  const angleMarker = `angle-${id}`;
+  const isMoment = /(?:\\times|\\begin\{vmatrix\}|\\vec\s*\{?M|\\mathbf\s*\{?M)/.test(latex);
+  const isPosition = /\\vec\s*\{?r|\\mathbf\s*\{?r/.test(latex) && !isMoment;
+  const isLambda = /\\lambda/.test(latex);
+  const hasAngles = /theta_[xyz]|theta\s*_\s*\{[xyz]\}/.test(latex);
+  const description = isMoment ? 'Moment of a force about the origin' : isPosition ? 'Position vector in Cartesian coordinates' : isLambda ? 'Force magnitude and its unit direction vector' : hasAngles ? 'Force direction angles and Cartesian components' : 'Force in Cartesian component form';
+  return <figure className="formula-context-diagram">
+    <svg viewBox="0 0 560 350" role="img" aria-label={`${description}. All variables shown in the equation are labeled.`}>
+      <defs>
+        <marker id={marker} markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" /></marker>
+        <marker id={angleMarker} markerWidth="5" markerHeight="5" refX="4" refY="2.5" orient="auto"><path d="M0,0 L5,2.5 L0,5 Z" /></marker>
+      </defs>
+      <g className="context-axes">
+        <line x1="160" y1="275" x2="500" y2="275" markerEnd={`url(#${marker})`} />
+        <line x1="160" y1="275" x2="160" y2="30" markerEnd={`url(#${marker})`} />
+        <line x1="160" y1="275" x2="42" y2="326" markerEnd={`url(#${marker})`} />
+      </g>
+      <g className="axis-labels">
+        <text x="510" y="282">y</text><text x="148" y="23">z</text><text x="22" y="339">x</text>
+        <text x="470" y="262">j</text><text x="174" y="50">k</text><text x="58" y="306">i</text>
+      </g>
+      <g className="context-guides">
+        <polyline points="160,275 397,275 397,92" />
+        <polyline points="160,275 93,304 330,304 397,275" />
+        <polyline points="330,304 330,121 397,92" />
+      </g>
+      {!isMoment && <g className="context-components">
+        <line x1="160" y1="275" x2="93" y2="304" /><line x1="93" y1="304" x2="330" y2="304" /><line x1="330" y1="304" x2="330" y2="121" />
+        <text x="83" y="287">{isPosition ? 'x' : 'Fₓ'}</text><text x="205" y="329">{isPosition ? 'y' : 'Fᵧ'}</text><text x="340" y="211">{isPosition ? 'z' : 'F_z'}</text>
+      </g>}
+      {isMoment && <>
+        <line className="position-vector" x1="160" y1="275" x2="302" y2="176" markerEnd={`url(#${marker})`} />
+        <line className="context-vector" x1="302" y1="176" x2="421" y2="78" markerEnd={`url(#${marker})`} />
+        <path className="moment-arc" d="M225 263 C245 229 245 210 222 191" markerEnd={`url(#${angleMarker})`} />
+        <text className="position-label" x="220" y="220">r</text><text className="vector-label" x="365" y="118">F</text><text className="moment-label" x="241" y="229">M = r × F</text>
+      </>}
+      {!isMoment && <>
+        <line className={isPosition ? 'position-vector' : 'context-vector'} x1="160" y1="275" x2="397" y2="92" markerEnd={`url(#${marker})`} />
+        <text className={isPosition ? 'position-label' : 'vector-label'} x="284" y="163">{isPosition ? 'r' : 'F'}</text>
+        {isLambda && <><line className="lambda-vector" x1="160" y1="275" x2="279" y2="183" markerEnd={`url(#${marker})`} /><text className="lambda-label" x="219" y="212">λ</text></>}
+        {hasAngles && <g className="angle-labels"><path d="M205 275 A45 45 0 0 0 192 246" /><text x="205" y="257">θᵧ</text><path d="M160 223 A52 52 0 0 1 191 234" /><text x="171" y="213">θ_z</text><path d="M128 289 A36 36 0 0 1 142 250" /><text x="112" y="258">θₓ</text></g>}
+      </>}
+      <circle cx="160" cy="275" r="5" className="context-joint" />
+    </svg>
+    <figcaption><strong>{description}.</strong> Generic visual reference; use the source figure for a problem’s exact geometry. Adapted from <a href="https://engineeringstatics.org/coordinates-3d.html" target="_blank" rel="noreferrer">Engineering Statics</a> by Daniel W. Baker and William Haynes, <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/" target="_blank" rel="noreferrer">CC BY-NC-SA 4.0</a>.</figcaption>
+  </figure>;
+}
+
+export function MathText({ latex, block = false, contextDiagram = false }: { latex: string; block?: boolean; contextDiagram?: boolean }) {
   let html;
   try { html = katex.renderToString(latex, { displayMode: block, throwOnError: true, trust: false, strict: 'error', output: 'htmlAndMathml' }); }
   catch { return <span className="math-error"><AlertCircle size={15} /> Notation needs correction: <code>{latex}</code></span>; }
-  const needsVectorContext = block && /(?:\\vec\s*\{?F|\\mathbf\s*F|F_x.*F_y.*F_z|R_x.*R_y.*R_z)/s.test(latex);
-  return <><span className={block ? 'math-block' : 'math-inline'} dangerouslySetInnerHTML={{ __html: html }} />{needsVectorContext && <figure className="formula-context-diagram"><svg viewBox="0 0 420 260" role="img" aria-label="Three-dimensional force and Cartesian component reference"><defs><marker id={marker} markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" /></marker></defs><g className="context-axes"><line x1="115" y1="205" x2="365" y2="205" markerEnd={`url(#${marker})`} /><line x1="115" y1="205" x2="115" y2="25" markerEnd={`url(#${marker})`} /><line x1="115" y1="205" x2="35" y2="245" markerEnd={`url(#${marker})`} /></g><g className="context-guides"><polyline points="115,205 285,205 285,75" /><polyline points="115,205 70,228 240,228 285,205" /><polyline points="240,228 240,98 285,75" /><line x1="285" y1="75" x2="240" y2="98" /></g><g className="context-components"><line x1="115" y1="205" x2="70" y2="228" /><line x1="70" y1="228" x2="240" y2="228" /><line x1="240" y1="228" x2="240" y2="98" /></g><line className="context-vector" x1="115" y1="205" x2="285" y2="75" markerEnd={`url(#${marker})`} /><circle cx="115" cy="205" r="4" className="context-joint" /><text x="374" y="211">y</text><text x="106" y="18">z</text><text x="20" y="253">x</text><text className="vector-label" x="210" y="124">F</text><text className="component-label" x="145" y="244">Fᵧ</text><text className="component-label" x="44" y="220">Fₓ</text><text className="component-label" x="247" y="158">F_z</text></svg><figcaption>A force in 3D is the vector sum of its x, y, and z projections. This reference explains the component directions; use the source figure for a problem’s exact geometry.</figcaption></figure>}</>;
+  const needsVectorContext = contextDiagram && block && /(?:\\vec|\\mathbf|F_[xyz]|R_[xyz]|theta_[xyz]|\\lambda|\\times|\\begin\{vmatrix\})/s.test(latex);
+  return <><span className={block ? 'math-block' : 'math-inline'} dangerouslySetInnerHTML={{ __html: html }} />{needsVectorContext && <VectorContextDiagram latex={latex} />}</>;
 }
 export function normalizeEngineeringText(text: string) {
   return text
