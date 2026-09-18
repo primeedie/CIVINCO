@@ -29,11 +29,13 @@
     "zod-to-json-schema": "^3.25.2"
   },
   "devDependencies": {
+    "@napi-rs/canvas": "^1.0.9",
     "@playwright/test": "^1.56.0",
     "@types/katex": "^0.16.7",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
     "@vitejs/plugin-react": "^4.7.0",
+    "pdfjs-dist": "^6.3.289",
     "typescript": "^5.9.0",
     "vite": "^6.4.0"
   }
