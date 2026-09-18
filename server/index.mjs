@@ -12,7 +12,7 @@ import { createStore } from './store.mjs';
 import { createAI } from './ai.mjs';
 import { createAccess } from './access.mjs';
 import { createCloudPersistence } from './cloud.mjs';
-import { categorySchema, formulaSchema, gradeAnswer, problemBankSchema, reviewSchedule, publicQuestion, validLatex, webSourceSchema } from './domain.mjs';
+import { categorySchema, formulaSchema, gradeAnswer, hasRequiredVisual, problemBankSchema, reviewSchedule, publicQuestion, validLatex, webSourceSchema } from './domain.mjs';
 import { addSamples, sampleQuestions } from './samples.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -152,6 +152,7 @@ app.post('/api/problem-banks', upload.single('file'), async (req, res) => {
     const bank = problemBankSchema.parse(raw);
     for (const [questionIndex, question] of bank.questions.entries()) {
       for (const [stepIndex, step] of question.steps.entries()) if (step.latex && !validLatex(step.latex)) throw fail(`Question ${questionIndex + 1}, solution step ${stepIndex + 1} contains invalid LaTeX.`);
+      if (!hasRequiredVisual(question)) throw fail(`Question ${questionIndex + 1} refers to a figure but does not include one.`);
     }
     const normalize = value => String(value).trim().toLowerCase().replace(/\s+/g, ' ');
     const existing = new Set(store.all('questions').filter(q => (!q.ownerId || q.ownerId === req.deviceId) && q.spex === bank.spex && q.set === bank.set).map(q => `${normalize(q.prompt)}|${q.answer}|${normalize(q.unit)}`));

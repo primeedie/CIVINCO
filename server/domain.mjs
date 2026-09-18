@@ -6,6 +6,7 @@ export const variableSchema = z.object({ symbol: z.string(), meaning: z.string()
 export const formulaSchema = z.object({
   title: z.string().min(1), topic: z.string().min(1), latex: z.string().min(1),
   variables: z.array(variableSchema), conditions: z.string(), uncertain: z.boolean(), note: z.string(),
+  equationScope: z.enum(['general', 'case-specific']).default('general'),
 });
 export const webSourceSchema = z.object({ title: z.string().min(1), url: z.string().url() });
 export const repairSchema = formulaSchema.extend({
@@ -54,6 +55,12 @@ export const problemBankSchema = z.object({
 export function validLatex(latex) {
   try { katex.renderToString(latex, { throwOnError: true, trust: false, strict: 'error' }); return true; }
   catch { return false; }
+}
+export function hasRequiredVisual(question) {
+  const mentionsVisual = /\b(?:as shown|shown in (?:the )?figure|refer to (?:the )?(?:figure|diagram)|from (?:the )?(?:figure|diagram))\b/i.test(question.prompt || '');
+  const diagram = question.diagram || {};
+  const hasVisual = Boolean(question.diagramImage?.visualAid || ['lines', 'arrows', 'circles', 'rectangles', 'labels'].some(key => diagram[key]?.length));
+  return !mentionsVisual || hasVisual;
 }
 // Input is a number in the explicitly displayed unit, never evaluated as code.
 export function gradeAnswer(input, expected, tolerance) {
