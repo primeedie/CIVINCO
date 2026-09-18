@@ -11,7 +11,7 @@ export type Question = { id: string; title: string; topic: string; spex: Spex; s
 export type Attempt = { id: string; questionId: string; spex: Spex; set: number; topic: string; correct: boolean; answer: number | null; revealed: boolean; createdAt: string };
 export type Review = { id: string; itemId: string; spex: Spex; set: number; topic: string; interval: number; due: string; count: number; rating: string; lastReviewedAt: string };
 export type State = { documents: Source[]; pages: SourcePage[]; items: Item[]; questions: Question[]; attempts: Attempt[]; reviews: Review[]; settings: { connected: boolean; model: string } };
-export type Solution = { correct?: boolean; numeric?: number; expected: number; unit: string; tolerance: number; steps: { text: string; latex: string }[]; revealed?: boolean; firstAttempt?: boolean };
+export type Solution = { correct?: boolean; numeric?: number; expected: number; unit: string; tolerance: number; steps: { text: string; latex: string }[]; solutionQuality?: 'worked' | 'answer-key' | 'source'; revealed?: boolean; firstAttempt?: boolean };
 export const SPEX = {
   A: { code: 'PSAD', title: 'Principles of Structural Analysis & Design', short: 'Structural analysis & design', color: 'sage' },
   B: { code: 'MSTE', title: 'Mathematics, Surveying & Transportation Engineering', short: 'Mathematics, surveying & transportation', color: 'clay' },

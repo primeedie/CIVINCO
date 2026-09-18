@@ -517,7 +517,7 @@ app.post('/api/questions/:id/answer', (req, res) => {
   const { answer } = z.object({ answer: z.string().max(100) }).parse(req.body);
   const graded = gradeAnswer(answer, q.answer, q.tolerance);
   store.put('attempts', { id: randomUUID(), ownerId: req.deviceId, questionId: q.id, spex: q.spex, set: q.set, topic: q.topic, correct: graded.correct, answer: graded.numeric, revealed: false, createdAt: new Date().toISOString() });
-  res.json({ ...graded, expected: q.answer, tolerance: q.tolerance, unit: q.unit, steps: q.steps, firstAttempt: true });
+  res.json({ ...graded, expected: q.answer, tolerance: q.tolerance, unit: q.unit, steps: q.steps, solutionQuality: q.solutionQuality, firstAttempt: true });
 });
 app.post('/api/questions/:id/solution', (req, res) => {
   const q = requireVisibleQuestion(req.params.id, req);
@@ -526,7 +526,7 @@ app.post('/api/questions/:id/solution', (req, res) => {
     attempt = { id: randomUUID(), ownerId: req.deviceId, questionId: q.id, spex: q.spex, set: q.set, topic: q.topic, correct: false, answer: null, revealed: true, createdAt: new Date().toISOString() };
     store.put('attempts', attempt);
   }
-  res.json({ correct: attempt.correct, numeric: attempt.answer, expected: q.answer, tolerance: q.tolerance, unit: q.unit, steps: q.steps, revealed: attempt.revealed });
+  res.json({ correct: attempt.correct, numeric: attempt.answer, expected: q.answer, tolerance: q.tolerance, unit: q.unit, steps: q.steps, solutionQuality: q.solutionQuality, revealed: attempt.revealed });
 });
 app.post('/api/reviews', (req, res) => {
   const { itemId, rating } = z.object({ itemId: z.string(), rating: z.enum(['again', 'hard', 'good', 'easy']) }).parse(req.body);
