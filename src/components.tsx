@@ -31,8 +31,7 @@ function VectorContextDiagram({ latex }: { latex: string }) {
         <line x1="160" y1="275" x2="42" y2="326" markerEnd={`url(#${marker})`} />
       </g>
       <g className="axis-labels">
-        <text x="510" y="282">y</text><text x="148" y="23">z</text><text x="22" y="339">x</text>
-        <text x="470" y="262">j</text><text x="174" y="50">k</text><text x="58" y="306">i</text>
+        <text x="492" y="296">+y, j</text><text x="172" y="27">+z, k</text><text x="20" y="340">+x, i</text>
       </g>
       <g className="context-guides">
         <polyline points="160,275 397,275 397,92" />
@@ -41,7 +40,7 @@ function VectorContextDiagram({ latex }: { latex: string }) {
       </g>
       {!isMoment && <g className="context-components">
         <line x1="160" y1="275" x2="93" y2="304" /><line x1="93" y1="304" x2="330" y2="304" /><line x1="330" y1="304" x2="330" y2="121" />
-        <text x="83" y="287">{isPosition ? 'x' : 'Fₓ'}</text><text x="205" y="329">{isPosition ? 'y' : 'Fᵧ'}</text><text x="340" y="211">{isPosition ? 'z' : 'F_z'}</text>
+        <text x="70" y="286">{isPosition ? 'x i' : 'Fₓ i'}</text><text x="205" y="329">{isPosition ? 'y j' : 'Fᵧ j'}</text><text x="340" y="211">{isPosition ? 'z k' : 'F_z k'}</text>
       </g>}
       {isMoment && <>
         <line className="position-vector" x1="160" y1="275" x2="302" y2="176" markerEnd={`url(#${marker})`} />
@@ -52,7 +51,7 @@ function VectorContextDiagram({ latex }: { latex: string }) {
       {!isMoment && <>
         <line className={isPosition ? 'position-vector' : 'context-vector'} x1="160" y1="275" x2="397" y2="92" markerEnd={`url(#${marker})`} />
         <text className={isPosition ? 'position-label' : 'vector-label'} x="284" y="163">{isPosition ? 'r' : 'F'}</text>
-        {isLambda && <><line className="lambda-vector" x1="160" y1="275" x2="279" y2="183" markerEnd={`url(#${marker})`} /><text className="lambda-label" x="219" y="212">λ</text></>}
+        {isLambda && <><line className="lambda-vector" x1="160" y1="275" x2="279" y2="183" markerEnd={`url(#${marker})`} /><text className="lambda-label" x="205" y="209">λ (unit direction)</text><text className="lambda-label" x="365" y="55">F = Fλ</text></>}
         {hasAngles && <g className="angle-labels"><path d="M205 275 A45 45 0 0 0 192 246" /><text x="205" y="257">θᵧ</text><path d="M160 223 A52 52 0 0 1 191 234" /><text x="171" y="213">θ_z</text><path d="M128 289 A36 36 0 0 1 142 250" /><text x="112" y="258">θₓ</text></g>}
       </>}
       <circle cx="160" cy="275" r="5" className="context-joint" />
@@ -69,15 +68,13 @@ export function MathText({ latex, block = false, contextDiagram = false }: { lat
   return <><span className={block ? 'math-block' : 'math-inline'} dangerouslySetInnerHTML={{ __html: html }} />{needsVectorContext && <VectorContextDiagram latex={latex} />}</>;
 }
 export function normalizeEngineeringText(text: string) {
-  return text
-    .replace(/(\d)\s*(mm|cm|km|m)\s*\^?\s*2\b/g, '$1 $2²')
-    .replace(/(\d)\s*(mm|cm|km|m)\s*\^?\s*3\b/g, '$1 $2³')
-    .replace(/(\d)\s*(mm|cm|km|m)\s*\^?\s*4\b/g, '$1 $2⁴')
-    .replace(/\b(mm|cm|km|m)\s*\^?\s*2\b/g, '$1²')
-    .replace(/\b(mm|cm|km|m)\s*\^?\s*3\b/g, '$1³')
-    .replace(/\b(mm|cm|km|m)\s*\^?\s*4\b/g, '$1⁴')
-    .replace(/\b(m|ft)\s*\/\s*s\s*\^?\s*2\b/g, '$1/s²')
-    .replace(/\b(kN|N)\s*\/\s*(mm|cm|m)\s*\^?\s*3\b/g, '$1/$2³')
+  return String(text || '')
+    .replace(/\b(?:sq\.?|square)\s*(mm|cm|m|km|ft|in)\b/gi, '$1²')
+    .replace(/\b(?:cu\.?|cubic)\s*(mm|cm|m|km|ft|in)\b/gi, '$1³')
+    .replace(/(\d)(mm|cm|km|m|ft|in)\s*\^?\s*([234])\b/gi, (_, number, unit, power) => `${number} ${unit}${({ 2: '²', 3: '³', 4: '⁴' } as Record<string, string>)[power]}`)
+    .replace(/\b(mm|cm|km|m|ft|in)\s*\^?\s*([234])\b/gi, (_, unit, power) => `${unit}${({ 2: '²', 3: '³', 4: '⁴' } as Record<string, string>)[power]}`)
+    .replace(/\b(m|ft)\s*\/\s*s\s*\^?\s*2\b/gi, '$1/s²')
+    .replace(/\b(kg|kN|N)\s*\/\s*(mm|cm|m|ft)\s*\^?\s*([23])\b/gi, (_, force, unit, power) => `${force}/${unit}${power === '2' ? '²' : '³'}`)
     .replace(/\b(kN|N)\s*-\s*m\b/g, '$1·m')
     .replace(/(\d),\s+(\d{3})\b/g, '$1,$2')
     .replace(/(\d)\s*(kN|MN|N|kPa|MPa|GPa|Pa|mm|cm|km|m|L\/s)\b/g, '$1 $2')

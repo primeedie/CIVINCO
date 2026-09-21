@@ -13,7 +13,7 @@ test('imports and studies an ordered illustrated problem bank without Gemini', a
     version: 1, name: 'Offline HGE Bank', spex: 'C', set: 9,
     questions: [{
       title: 'Imported discharge problem', topic: 'Hydraulics',
-      prompt: 'A channel carries 42 m³/s. State the discharge.', answer: 42, unit: 'm³/s', tolerance: 0.01,
+      prompt: 'A channel carries 42 m3/s. State the discharge.', answer: 42, unit: 'm3/s', tolerance: 0.01,
       steps: [{ text: 'The requested discharge is stated directly.', latex: 'Q=42\\ \\mathrm{m^3/s}' }],
       diagramImage: { data: sourceDiagram, alt: 'Original channel diagram', caption: 'Shared source figure.' },
     }, {
@@ -44,7 +44,7 @@ test('imports and studies an ordered illustrated problem bank without Gemini', a
   await page.getByRole('button', { name: /SPEX C/ }).last().click();
   await page.getByLabel('Filter by set').selectOption('9');
   await expect(page.getByRole('heading', { name: 'Hydraulics' })).toBeVisible();
-  await expect(page.getByText(/A channel carries 42/)).toBeVisible();
+  await expect(page.getByText(/A channel carries 42 m³\/s/)).toBeVisible();
   await expect(page.getByText('Permanent problem bank · no Gemini usage')).toBeVisible();
   await expect(page.locator('.source-diagram img')).toHaveAttribute('alt', 'Original channel diagram');
   await expect(page.locator('.question-list>button')).toHaveCount(3);
