@@ -14,6 +14,7 @@ import { createAccess } from './access.mjs';
 import { createCloudPersistence } from './cloud.mjs';
 import { categorySchema, formulaSchema, gradeAnswer, hasRequiredVisual, problemBankSchema, reviewSchedule, publicQuestion, validLatex, webSourceSchema } from './domain.mjs';
 import { addSamples, sampleQuestions } from './samples.mjs';
+import { offlineVariants } from './variants.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const dataDir = path.resolve(process.env.CIVINCO_DATA_DIR || path.join(root, 'data'));
@@ -456,7 +457,7 @@ app.post('/api/items', (req, res) => {
 
 let generating = false;
 app.post('/api/questions/generate', async (req, res) => {
-  const input = categorySchema.extend({ mode: z.enum(['ai', 'sample', 'bank']), style: z.enum(['generated', 'source']).default('generated'), count: z.number().int().min(1).max(10), difficulty: z.enum(['Foundation', 'Board-level', 'Challenge']), replace: z.boolean().default(false) }).parse(req.body);
+  const input = categorySchema.extend({ mode: z.enum(['ai', 'sample', 'bank', 'variant']), style: z.enum(['generated', 'source']).default('generated'), count: z.number().int().min(1).max(10), difficulty: z.enum(['Foundation', 'Board-level', 'Challenge']), replace: z.boolean().default(false) }).parse(req.body);
   if (generating) throw fail('A question set is already being generated. Please wait.', 409);
   if (activePractice(req.deviceId).questionIds.length && !input.replace) throw fail('Confirm that you want to replace the current practice set.', 409);
   const sourceStyle = input.mode === 'ai' && input.style === 'source';
@@ -471,6 +472,13 @@ app.post('/api/questions/generate', async (req, res) => {
     const selected = shuffled.slice(0, input.count).sort((a, b) => (a.sourcePage || 0) - (b.sourcePage || 0));
     const createdAt = new Date().toISOString();
     const questions = selected.map(({ id: sourceBankQuestionId, pool: _pool, createdAt: _createdAt, ownerId: _ownerId, ...question }) => ({ ...question, id: randomUUID(), ownerId: req.deviceId, sourceBankQuestionId, pool: false, mode: 'bank', createdAt }));
+    store.transaction(() => { questions.forEach(question => store.put('questions', question)); setActivePractice(questions, req.deviceId); });
+    return res.json({ questions: questions.map(publicQuestion) });
+  }
+  if (input.mode === 'variant') {
+    const pool = store.all('questions').filter(question => question.pool && question.offlineVariant && (!question.ownerId || question.ownerId === req.deviceId) && question.spex === input.spex && question.set === input.set);
+    const questions = offlineVariants(pool, input.count).map(question => ({ ...question, ownerId: req.deviceId }));
+    if (questions.length !== input.count) throw fail('No offline variation templates are available for this SPEX and Set yet. Choose permanent-bank questions instead.');
     store.transaction(() => { questions.forEach(question => store.put('questions', question)); setActivePractice(questions, req.deviceId); });
     return res.json({ questions: questions.map(publicQuestion) });
   }

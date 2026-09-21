@@ -34,6 +34,7 @@ test('imports and studies an ordered illustrated problem bank without Gemini', a
   await expect(page.getByRole('heading', { name: 'Imported discharge problem' })).toHaveCount(0);
   await page.getByRole('button', { name: 'Generate new questions', exact: true }).click();
   const generator = page.getByRole('dialog', { name: 'Create a practice set' });
+  await expect(generator.getByLabel('Question source').locator('option[value="variant"]')).toHaveText(/Offline variations/);
   await generator.getByLabel('Question source').selectOption('bank');
   await generator.getByLabel('Examination').selectOption('C');
   await generator.getByLabel('Set').fill('9');
@@ -42,7 +43,8 @@ test('imports and studies an ordered illustrated problem bank without Gemini', a
   await expect(generator).toHaveCount(0);
   await page.getByRole('button', { name: /SPEX C/ }).last().click();
   await page.getByLabel('Filter by set').selectOption('9');
-  await expect(page.getByRole('heading', { name: 'Imported discharge problem' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Hydraulics' })).toBeVisible();
+  await expect(page.getByText(/A channel carries 42/)).toBeVisible();
   await expect(page.getByText('Permanent problem bank · no Gemini usage')).toBeVisible();
   await expect(page.locator('.source-diagram img')).toHaveAttribute('alt', 'Original channel diagram');
   await expect(page.locator('.question-list>button')).toHaveCount(3);
@@ -56,10 +58,10 @@ test('imports and studies an ordered illustrated problem bank without Gemini', a
   await expect(page.getByRole('heading', { name: 'You got it.' })).toBeVisible();
   await expect(page.getByLabel('Your answer')).toHaveCount(0);
   await page.getByRole('button', { name: 'Next problem', exact: false }).click();
-  await expect(page.getByRole('heading', { name: 'Follow-up velocity problem' })).toBeVisible();
+  await expect(page.getByText(/state the velocity/)).toBeVisible();
   await expect(page.locator('.source-diagram img')).toHaveAttribute('alt', 'Original channel diagram');
   await page.getByRole('button', { name: 'Previous', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Imported discharge problem' })).toBeVisible();
+  await expect(page.getByText(/A channel carries 42/)).toBeVisible();
   await expect(page.getByRole('heading', { name: 'You got it.' })).toBeVisible();
   await expect(page.getByLabel('Your answer')).toHaveCount(0);
   expect(errors).toEqual([]);

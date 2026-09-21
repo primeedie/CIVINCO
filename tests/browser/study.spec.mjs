@@ -29,7 +29,7 @@ test('complete review experience, rendered math, persistence, responsive layout 
   await page.getByLabel('Question source').selectOption('sample');
   await page.getByRole('dialog').getByRole('button', { name: 'Generate new questions', exact: true }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
-  await expect(page.locator('.problem-panel h2')).toHaveText(/Angle of friction|Average normal stress/);
+  await expect(page.locator('.problem-panel h2')).toHaveText(/Friction|Mechanics of materials/);
   await expect(page.locator('.engineering-diagram')).toBeVisible();
   await page.getByLabel('Your answer').fill('-999');
   await page.getByRole('button', { name: 'Check answer', exact: true }).click();

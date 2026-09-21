@@ -7,6 +7,7 @@ import { createStore } from '../server/store.mjs';
 import { gradeAnswer, reviewSchedule, validLatex, publicQuestion } from '../server/domain.mjs';
 import { addSamples, sampleQuestions } from '../server/samples.mjs';
 import { createAI } from '../server/ai.mjs';
+import { offlineVariants } from '../server/variants.mjs';
 
 test('numeric grading accepts scientific notation, rounding boundaries and Unicode minus', () => {
   assert.equal(gradeAnswer('1.25e2', 125, 0.01).correct, true);
@@ -29,7 +30,21 @@ test('LaTeX preserves Greek, primes and summations and rejects malformed express
   assert.equal(validLatex(String.raw`\notarealcommand`), false);
 });
 test('public questions do not expose answers or worked solutions', () => {
-  assert.deepEqual(publicQuestion({ id: 'q', answer: 12, tolerance: .01, steps: [], prompt: 'Compute.' }), { id: 'q', prompt: 'Compute.' });
+  assert.deepEqual(publicQuestion({ id: 'q', answer: 12, tolerance: .01, steps: [], offlineVariant: 'dice-sum', prompt: 'Compute.' }), { id: 'q', prompt: 'Compute.' });
+});
+test('offline variations recalculate supported figure-free problems without AI', () => {
+  const kinds = ['vector-resultant', 'vehicle-catchup', 'shaft-polar-moment', 'dice-sum', 'direct-proportion', 'similar-polygon', 'circular-seating', 'buoyant-volume'];
+  for (const offlineVariant of kinds) {
+    const questions = offlineVariants([{ id: offlineVariant, offlineVariant, title: 'Source', topic: 'Topic', spex: 'A', set: 1, sourceIds: [], sourceDocId: 'doc', sourcePage: 1 }], 3);
+    assert.equal(questions.length, 3, offlineVariant);
+    for (const question of questions) {
+      assert.equal(Number.isFinite(question.answer), true, offlineVariant);
+      assert.equal(question.mode, 'variant');
+      assert.equal(question.sourceBankQuestionId, offlineVariant);
+      assert.equal(question.diagram.labels.length, 0);
+      assert.equal(question.steps.every(step => !step.latex || validLatex(step.latex)), true, offlineVariant);
+    }
+  }
 });
 test('durable store, sample symbol fidelity, all sample question families and rollback', () => {
   const directory = mkdtempSync(path.join(os.tmpdir(), 'civinco-unit-'));

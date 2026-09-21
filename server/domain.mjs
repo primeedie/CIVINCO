@@ -78,6 +78,6 @@ export function reviewSchedule(previous, rating, now = Date.now()) {
   return { interval, due: new Date(now + (rating === 'again' ? 600_000 : interval * 86_400_000)).toISOString(), rating };
 }
 export function publicQuestion(q) {
-  const { answer, tolerance, steps, diagramImage, pool: _pool, ...publicPart } = q;
+  const { answer, tolerance, steps, diagramImage, offlineVariant: _offlineVariant, pool: _pool, ...publicPart } = q;
   return { ...publicPart, ...(diagramImage?.visualAid ? { diagram: { ...(q.diagram || { title: '', caption: '', lines: [], arrows: [], circles: [], rectangles: [], labels: [] }), image: { url: `/api/questions/${q.id}/diagram`, alt: diagramImage.alt, caption: diagramImage.caption } } } : {}) };
 }
