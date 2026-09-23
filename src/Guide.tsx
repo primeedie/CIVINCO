@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, ArrowRight, BookCheck, BookOpen, CheckCircle2, ClipboardCheck, Lightbulb, ListChecks, Target } from 'lucide-react';
 import { Badge, Empty, MathText, normalizeEngineeringText, normalizeMathSymbol, RichText, SourceLink } from './components';
 import type { SharedProps } from './App';
+import { categoryPosition, compareByPdfOrder, sourceCategory, type GuideRecord } from './studyCategories';
 import type { View } from './types';
 
 const unique = <T,>(values: T[]) => [...new Set(values)];
@@ -24,36 +25,41 @@ export function Guide({ state, filter, navigate }: SharedProps & { navigate: (vi
   const scopedItems = filter(state.items);
   const scopedQuestions = filter(state.questions);
   const scopedAttempts = filter(state.attempts).filter(attempt => !attempt.revealed);
-  const topics = useMemo(() => unique([...scopedItems.map(item => clean(item.topic)), ...scopedQuestions.map(question => clean(question.topic))].filter(Boolean)).sort((a, b) => a.localeCompare(b)), [scopedItems, scopedQuestions]);
+  const records: GuideRecord[] = [...scopedItems, ...scopedQuestions];
+  const categories = useMemo(() => unique(records.filter(record => clean(record.topic)).map(record => sourceCategory(record, state.documents))).sort((a, b) => categoryPosition(a) - categoryPosition(b) || a.localeCompare(b)), [scopedItems, scopedQuestions, state.documents]);
   const [selected, setSelected] = useState('');
-  useEffect(() => { if (!topics.includes(selected)) setSelected(topics[0] || ''); }, [topics.join('|'), selected]);
+  useEffect(() => { if (!categories.includes(selected)) setSelected(categories[0] || ''); }, [categories.join('|'), selected]);
 
-  const entries = scopedItems.filter(item => clean(item.topic) === selected);
+  const documentOrder = new Map(state.documents.map((document, index) => [document.id, index]));
+  const entries = scopedItems.filter(item => sourceCategory(item, state.documents) === selected).sort((a, b) => compareByPdfOrder(a, b, documentOrder));
   const concepts = entries.filter(item => item.kind === 'concept');
   const formulas = entries.filter(item => item.kind === 'formula');
   const uncheckedCount = formulas.filter(item => !item.reviewed || item.uncertain).length;
   const applications = unique(formulas.map(item => clean(item.conditions)).filter(Boolean));
-  const examples = unique(scopedQuestions.filter(question => clean(question.topic) === selected).map(question => question.title)).slice(0, 6);
-  const attempts = scopedAttempts.filter(attempt => clean(attempt.topic) === selected);
+  const categoryQuestions = scopedQuestions.filter(question => sourceCategory(question, state.documents) === selected).sort((a, b) => a.spex.localeCompare(b.spex) || a.set - b.set || (documentOrder.get(a.sourceDocId || '') ?? 9999) - (documentOrder.get(b.sourceDocId || '') ?? 9999) || (a.sourcePage || 0) - (b.sourcePage || 0));
+  const categoryTopics = unique([...entries.map(item => clean(item.topic)), ...categoryQuestions.map(question => clean(question.topic))].filter(Boolean));
+  const examples = unique(categoryQuestions.map(question => question.title)).slice(0, 6);
+  const topicCategories = new Map(records.map(record => [clean(record.topic), sourceCategory(record, state.documents)]));
+  const attempts = scopedAttempts.filter(attempt => topicCategories.get(clean(attempt.topic)) === selected);
   const correct = attempts.filter(attempt => attempt.correct).length;
-  const first = entries[0] || scopedQuestions.find(question => clean(question.topic) === selected);
+  const first = entries[0] || categoryQuestions[0];
 
-  if (!topics.length) return <Empty icon={<BookOpen size={30} />} title="Your study guide will grow from your materials" text="Add starter references or extract an uploaded file. CIVINCO will organize its concepts and formulas into topic lessons without another Gemini request." />;
+  if (!categories.length) return <Empty icon={<BookOpen size={30} />} title="Your study guide will grow from your materials" text="Add starter references or extract an uploaded file. CIVINCO will organize its concepts and formulas into topic lessons without another Gemini request." />;
 
   return <div className="guide-layout">
-    <aside className="guide-index" aria-label="Study guide topics">
-      <div className="guide-index-heading"><span className="section-kicker"><BookOpen size={15} /> TOPIC INDEX</span><strong>{topics.length} {topics.length === 1 ? 'topic' : 'topics'}</strong></div>
-      {topics.map(topic => {
-        const topicItems = scopedItems.filter(item => clean(item.topic) === topic);
-        const topicAttempts = scopedAttempts.filter(attempt => clean(attempt.topic) === topic);
-        const percent = topicAttempts.length ? Math.round(topicAttempts.filter(attempt => attempt.correct).length / topicAttempts.length * 100) : null;
-        return <button key={topic} className={selected === topic ? 'active' : ''} onClick={() => setSelected(topic)}><span><strong>{topic}</strong><small>{topicItems.length} study {topicItems.length === 1 ? 'entry' : 'entries'}</small></span><span className={percent === null ? '' : percent >= 80 ? 'strong' : percent < 60 ? 'focus' : ''}>{percent === null ? 'NEW' : `${percent}%`}</span></button>;
+    <aside className="guide-index" aria-label="Study guide categories">
+      <div className="guide-index-heading"><span className="section-kicker"><BookOpen size={15} /> SLIDE CATEGORIES</span><strong>{categories.length} {categories.length === 1 ? 'category' : 'categories'}</strong></div>
+      {categories.map(category => {
+        const categoryItems = scopedItems.filter(item => sourceCategory(item, state.documents) === category);
+        const categoryAttempts = scopedAttempts.filter(attempt => topicCategories.get(clean(attempt.topic)) === category);
+        const percent = categoryAttempts.length ? Math.round(categoryAttempts.filter(attempt => attempt.correct).length / categoryAttempts.length * 100) : null;
+        return <button key={category} className={selected === category ? 'active' : ''} onClick={() => setSelected(category)}><span><strong>{category}</strong><small>{categoryItems.length} study {categoryItems.length === 1 ? 'entry' : 'entries'}</small></span><span className={percent === null ? '' : percent >= 80 ? 'strong' : percent < 60 ? 'focus' : ''}>{percent === null ? 'NEW' : `${percent}%`}</span></button>;
       })}
     </aside>
 
     <article className="guide-article">
       <header className="guide-hero">
-        <div>{first && <Badge spex={first.spex} set={first.set} />}<span className="topic-label">STUDY GUIDE</span><h2>{selected}</h2><p>This page gathers the ideas, equations, and applications already supported by your selected materials. Learn the meaning first, recall the governing relationships, then apply them in practice.</p></div>
+        <div>{first && <Badge spex={first.spex} set={first.set} />}<span className="topic-label">STUDY GUIDE · SOURCE SLIDE CATEGORY</span><h2>{selected}</h2><p>The material and equations below follow their order in the source PDF.</p></div>
         <div className="guide-score"><span>{attempts.length ? `${correct}/${attempts.length}` : '—'}</span><small>{attempts.length ? 'correct first attempts' : 'no scored attempts yet'}</small></div>
       </header>
 
@@ -79,7 +85,7 @@ export function Guide({ state, filter, navigate }: SharedProps & { navigate: (vi
 
       <section className="guide-section guide-checklist">
         <div className="guide-section-title"><ListChecks size={19} /><div><span>BEFORE YOU SOLVE</span><h3>Quick checks</h3></div></div>
-        <ol>{remindersFor(selected).map(reminder => <li key={reminder}>{reminder}</li>)}</ol>
+        <ol>{remindersFor(`${selected} ${categoryTopics.join(' ')}`).map(reminder => <li key={reminder}>{reminder}</li>)}</ol>
       </section>
 
       <nav className="guide-actions" aria-label="Continue studying"><button className="button secondary" onClick={() => navigate('library')}>Open formulas <ArrowRight size={15} /></button><button className="button secondary" onClick={() => navigate('flashcards')}>Review flashcards <ArrowRight size={15} /></button><button className="button primary" onClick={() => navigate('practice')}>Practice this material <ArrowRight size={15} /></button></nav>

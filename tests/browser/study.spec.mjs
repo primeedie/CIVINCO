@@ -12,8 +12,8 @@ test('complete review experience, rendered math, persistence, responsive layout 
   await page.getByRole('button', { name: 'Add starter references' }).click();
   await page.getByRole('button', { name: 'Study Guide', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Study guide', exact: true })).toBeVisible();
-  await page.locator('.guide-index').getByRole('button', { name: /Friction/ }).click();
-  await expect(page.locator('.guide-article').getByRole('heading', { name: 'Friction', exact: true })).toBeVisible();
+  await page.locator('.guide-index').getByRole('button', { name: /Statics of Rigid Bodies/ }).click();
+  await expect(page.locator('.guide-article').getByRole('heading', { name: 'Statics of Rigid Bodies', exact: true })).toBeVisible();
   await expect(page.getByText('Understand before memorizing')).toBeVisible();
   await expect(page.locator('.guide-formula .katex')).not.toHaveCount(0);
   await expect(page.getByText(/At impending sliding/).first()).toBeVisible();
