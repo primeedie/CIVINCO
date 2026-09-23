@@ -34,6 +34,43 @@ test('public questions do not expose answers or worked solutions', () => {
 });
 test('offline variations recalculate supported figure-free problems without AI', () => {
   const kinds = ['vector-resultant', 'vehicle-catchup', 'shaft-polar-moment', 'dice-sum', 'direct-proportion', 'similar-polygon', 'circular-seating', 'buoyant-volume'];
+  const factorial = value => Array.from({ length: value }, (_, index) => index + 1).reduce((product, entry) => product * entry, 1);
+  const independentlySolve = question => {
+    const numbers = pattern => question.prompt.match(pattern)?.slice(1).map(Number) || [];
+    if (question.offlineVariant === 'vector-resultant') {
+      const [first, second, third] = numbers(/F1 = (\d+).*F2 = (\d+).*F3 = (\d+)/);
+      const directions = [[5, -2, 7], [-3, 0, -4], [2, 1, -6]];
+      const scales = directions.map((direction, index) => [first, second, third][index] / Math.hypot(...direction));
+      return Math.hypot(...[0, 1, 2].map(axis => directions.reduce((sum, direction, index) => sum + direction[axis] * scales[index], 0)));
+    }
+    if (question.offlineVariant === 'vehicle-catchup') {
+      const [truck, car, distance] = numbers(/truck accelerates at ([\d.]+).*car at ([\d.]+).*traveled (\d+)/);
+      return distance * (car / truck - 1);
+    }
+    if (question.offlineVariant === 'shaft-polar-moment') {
+      const [length, torque, angle, modulus] = numbers(/shaft ([\d.]+) m long transmits (\d+).*twist to (\d+).*G = (\d+)/);
+      return torque * length / (modulus * angle * Math.PI / 180);
+    }
+    if (question.offlineVariant === 'dice-sum') {
+      const [limit] = numbers(/sum is less than (\d+)/);
+      return Array.from({ length: 6 }, (_, first) => Array.from({ length: 6 }, (_, second) => first + second + 2 < limit ? 1 : 0)).flat().reduce((sum, entry) => sum + entry, 0) / 36;
+    }
+    if (question.offlineVariant === 'direct-proportion') {
+      const [stories, shadow, targetShadow] = numbers(/a (\d+)-story building casts a ([\d.]+).*casts a ([\d.]+)/);
+      return stories * targetShadow / shadow;
+    }
+    if (question.offlineVariant === 'similar-polygon') {
+      const match = question.prompt.match(/side lengths ([\d, ]+) m.*longest side of ([\d.]+) m/);
+      const sides = match[1].split(',').map(Number), smallerLongest = Number(match[2]);
+      return sides.reduce((sum, side) => sum + side, 0) * smallerLongest / Math.max(...sides);
+    }
+    if (question.offlineVariant === 'circular-seating') {
+      const [friends] = numbers(/invites (\d+) friends/);
+      return 2 * factorial(friends);
+    }
+    const [airWeight, waterWeight] = numbers(/weighs (\d+) N in air and (\d+) N/);
+    return (airWeight - waterWeight) / 9810;
+  };
   for (const offlineVariant of kinds) {
     const questions = offlineVariants([{ id: offlineVariant, offlineVariant, title: 'Source', topic: 'Topic', spex: 'A', set: 1, sourceIds: [], sourceDocId: 'doc', sourcePage: 1 }], 3);
     assert.equal(questions.length, 3, offlineVariant);
@@ -43,6 +80,7 @@ test('offline variations recalculate supported figure-free problems without AI',
       assert.equal(question.sourceBankQuestionId, offlineVariant);
       assert.equal(question.diagram.labels.length, 0);
       assert.equal(question.steps.every(step => !step.latex || validLatex(step.latex)), true, offlineVariant);
+      assert.ok(Math.abs(question.answer - independentlySolve(question)) <= question.tolerance, `${offlineVariant}: recalculated answer must match changed givens`);
     }
   }
 });

@@ -1,5 +1,5 @@
 export type Spex = 'A' | 'B' | 'C';
-export type View = 'home' | 'library' | 'practice' | 'flashcards' | 'progress';
+export type View = 'home' | 'guide' | 'library' | 'practice' | 'flashcards' | 'progress';
 export type Source = { id: string; name: string; spex: Spex; set: number; kind: string; sample: boolean; size: number; totalPages: number; extension?: string; status: string; createdAt: string; error: string; editable?: boolean; autoCategorize?: boolean; categoryDetected?: boolean; categoryConfidence?: string; categoryReason?: string };
 export type SourcePage = { id: string; docId: string; page: number; status: string; reviewed: boolean; warnings: string[]; error: string };
 export type Variable = { symbol: string; meaning: string; unit: string };

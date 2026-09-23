@@ -1,14 +1,16 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ArrowRight, ArrowUpRight, BookOpen, ChartNoAxesCombined, CheckCircle2, ChevronRight, CircleHelp, GraduationCap, Home as HomeIcon, KeyRound, Layers, LoaderCircle, Menu, Palette, Settings2, Target, X } from 'lucide-react';
+import { ArrowRight, ArrowUpRight, BookMarked, BookOpen, ChartNoAxesCombined, CheckCircle2, ChevronRight, CircleHelp, GraduationCap, Home as HomeIcon, KeyRound, Layers, LoaderCircle, Menu, Palette, Settings2, Target, X } from 'lucide-react';
 import { api, Badge, Modal, Status } from './components';
 import { SPEX, type State, type Spex, type View, type Source } from './types';
 import { Home } from './Home';
 import { Library, FormulaEditor } from './Library';
 import { Practice, Flashcards, Progress } from './Study';
 import { UploadDialog, SourceDialog, SettingsDialog } from './Dialogs';
+import { Guide } from './Guide';
 
 const navigation = [
   { id: 'home', label: 'Home', icon: HomeIcon },
+  { id: 'guide', label: 'Study Guide', icon: BookMarked },
   { id: 'library', label: 'Concepts & Formulas', icon: BookOpen },
   { id: 'practice', label: 'Practice', icon: Target },
   { id: 'flashcards', label: 'Flashcards', icon: Layers },
@@ -79,9 +81,10 @@ export default function App() {
       <main>
         {error && <Status>{error} <button className="text-button" onClick={() => refresh().catch(e => setError(e.message))}>Reconnect</button></Status>}
         {!state ? <div className="loading-state"><GraduationCap size={34} /><h2>Opening your review space…</h2></div> : <>
-          <div className="page-heading"><div className="eyebrow">CIVIL ENGINEERING INTEGRATION COURSE</div><div className="title-row"><h1>{({ home: 'Review desk', library: 'Concepts & formulas', practice: 'Practice', flashcards: 'Flashcards', progress: 'Progress' })[view]}</h1>{view === 'home' && <button className="button primary" onClick={() => setUpload(true)}><span className="plus" aria-hidden="true">+</span> Upload files</button>}{view === 'library' && <button className="button secondary" onClick={() => setAddFormula(true)}>+ Add a formula</button>}</div></div>
+          <div className="page-heading"><div className="eyebrow">CIVIL ENGINEERING INTEGRATION COURSE</div><div className="title-row"><h1>{({ home: 'Review desk', guide: 'Study guide', library: 'Concepts & formulas', practice: 'Practice', flashcards: 'Flashcards', progress: 'Progress' })[view]}</h1>{view === 'home' && <button className="button primary" onClick={() => setUpload(true)}><span className="plus" aria-hidden="true">+</span> Upload files</button>}{view === 'library' && <button className="button secondary" onClick={() => setAddFormula(true)}>+ Add a formula</button>}</div></div>
           <div className="scope-bar"><div className="scope-tabs" aria-label="Filter by examination"><button className={spex === 'all' ? 'active' : ''} onClick={() => changeSpex('all')}>All SPEX</button>{(Object.keys(SPEX) as Spex[]).map(key => <button key={key} className={spex === key ? 'active' : ''} onClick={() => changeSpex(key)}><span className={`subject-dot ${SPEX[key].color}`} /> SPEX {key}<span className="scope-code">{SPEX[key].code}</span></button>)}</div><select aria-label="Filter by set" value={set} onChange={e => setSet(e.target.value)}><option value="all">All sets</option>{sets.map(n => <option key={n} value={n}>Set {n}</option>)}</select></div>
           {shared && view === 'home' && <Home {...shared} search={search} setSearch={setSearch} onUpload={() => setUpload(true)} onSource={(doc: Source) => setSourceId(doc.id)} navigate={navigate} onSpex={changeSpex} onSettings={() => setSettings(true)} />}
+          {shared && view === 'guide' && <Guide {...shared} navigate={navigate} />}
           {shared && view === 'library' && <Library {...shared} search={search} setSearch={setSearch} />}
           {shared && view === 'practice' && <Practice {...shared} />}
           {shared && view === 'flashcards' && <Flashcards {...shared} />}
