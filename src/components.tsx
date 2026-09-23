@@ -80,6 +80,21 @@ export function normalizeEngineeringText(text: string) {
     .replace(/(\d)\s*(kN|MN|N|kPa|MPa|GPa|Pa|mm|cm|km|m|L\/s)\b/g, '$1 $2')
     .replace(/\bx\s*10\s*\^\s*([+-]?\d+)/gi, '×10^$1');
 }
+export function normalizeMathSymbol(symbol: string) {
+  if (String(symbol || '').includes('\\')) return String(symbol || '').trim();
+  const greek: Record<string, string> = { α: '\\alpha', β: '\\beta', γ: '\\gamma', δ: '\\delta', ε: '\\varepsilon', θ: '\\theta', λ: '\\lambda', μ: '\\mu', ν: '\\nu', ξ: '\\xi', π: '\\pi', ρ: '\\rho', σ: '\\sigma', τ: '\\tau', φ: '\\phi', ω: '\\omega', Δ: '\\Delta', Σ: '\\Sigma', Ω: '\\Omega' };
+  const subscripts: Record<string, string> = { '₀': '0', '₁': '1', '₂': '2', '₃': '3', '₄': '4', '₅': '5', '₆': '6', '₇': '7', '₈': '8', '₉': '9', 'ₓ': 'x', 'ᵧ': 'y', 'ᵢ': 'i', 'ⱼ': 'j', 'ₙ': 'n', 'ₛ': 's' };
+  let result = '', subscript = '';
+  const flush = () => { if (subscript) { result += `_{${subscript}}`; subscript = ''; } };
+  for (const character of String(symbol || '').trim()) {
+    if (subscripts[character]) { subscript += subscripts[character]; continue; }
+    flush();
+    if (character === '²' || character === '³' || character === '⁴') result += `^{${({ '²': '2', '³': '3', '⁴': '4' } as Record<string, string>)[character]}}`;
+    else result += greek[character] || character;
+  }
+  flush();
+  return result;
+}
 // Render only explicitly delimited mathematics; surrounding source text stays escaped.
 export function RichText({ text }: { text: string }) {
   const parts = normalizeEngineeringText(text).split(/(\$\$[\s\S]*?\$\$|\$[^$\n]+\$|\\\([\s\S]*?\\\)|\\\[[\s\S]*?\\\])/g);

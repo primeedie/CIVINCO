@@ -45,7 +45,15 @@ export default function App() {
   const [mobile, setMobile] = useState(false), [error, setError] = useState(''), [toast, setToast] = useState('');
   const refresh = useCallback(async () => { const next = await api<State>('/state'); setState(next); setError(''); }, []);
   useEffect(() => { api<{ locked: boolean }>('/access/status').then(result => setAccessGranted(!result.locked)).catch(() => setAccessGranted(false)); }, []);
-  useEffect(() => { if (!accessGranted) return; refresh().catch(e => setError(e.message)); const interval = window.setInterval(() => refresh().catch(e => setError(e.message)), 4000); return () => clearInterval(interval); }, [refresh, accessGranted]);
+  const extractionActive = Boolean(state?.documents.some(document => ['queued', 'extracting'].includes(document.status)));
+  useEffect(() => {
+    if (!accessGranted) return;
+    const update = () => { if (document.visibilityState === 'visible') refresh().catch(e => setError(e.message)); };
+    update();
+    const interval = window.setInterval(update, extractionActive ? 4000 : 30000);
+    document.addEventListener('visibilitychange', update);
+    return () => { window.clearInterval(interval); document.removeEventListener('visibilitychange', update); };
+  }, [refresh, accessGranted, extractionActive]);
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
     localStorage.setItem('civinco-theme', theme);

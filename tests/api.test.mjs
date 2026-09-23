@@ -91,6 +91,8 @@ test('full local study workflow, source coverage, grading, review gates, persist
   assert.equal(multiSetDraw.status, 200); assert.equal(multiSetDraw.data.questions.length, 3);
   assert.deepEqual([...new Set(multiSetDraw.data.questions.map(question => question.set))], [7, 8]);
   const retainedMultiSetQuestion = multiSetDraw.data.questions.find(question => question.set === 7);
+  assert.equal((await api(`/questions/${retainedMultiSetQuestion.id}/report`, { category: 'solution', note: 'Check the worked result.' })).status, 201);
+  assert.equal((await api(`/questions/${retainedMultiSetQuestion.id}/report`, { category: 'units', note: 'Check the displayed unit.' })).status, 200);
   assert.equal((await api(`/documents/${imageBank.data.document.id}`, undefined, 'DELETE')).status, 200);
   assert.equal((await api(`/documents/${doc.id}/pages/1/review`, {})).status, 400);
   const newFormula = { docId: doc.id, page: 1, title: 'Force balance', topic: 'Statics', latex: String.raw`\sum F_x = 0`, variables: [{ symbol: 'F_x', meaning: 'Horizontal force component', unit: 'N' }], conditions: 'Static equilibrium', uncertain: false, note: '', reviewed: true };

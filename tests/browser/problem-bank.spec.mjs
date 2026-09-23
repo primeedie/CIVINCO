@@ -37,7 +37,7 @@ test('imports and studies an ordered illustrated problem bank without Gemini', a
   await expect(generator.getByLabel('Question source').locator('option[value="variant"]')).toHaveText(/Offline variations/);
   await generator.getByLabel('Question source').selectOption('bank');
   await generator.getByLabel('Examination').selectOption('C');
-  await generator.getByLabel('Sets').fill('9');
+  await expect(generator.getByLabel('Set 9')).toBeChecked();
   await generator.getByLabel('Number of questions').selectOption('3');
   await generator.getByRole('button', { name: 'Choose random questions', exact: true }).click();
   await expect(generator).toHaveCount(0);

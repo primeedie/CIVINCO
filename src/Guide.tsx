@@ -1,19 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, ArrowRight, BookCheck, BookOpen, CheckCircle2, ClipboardCheck, Lightbulb, ListChecks, Target } from 'lucide-react';
-import { Badge, Empty, MathText, normalizeEngineeringText, RichText, SourceLink } from './components';
+import { Badge, Empty, MathText, normalizeEngineeringText, normalizeMathSymbol, RichText, SourceLink } from './components';
 import type { SharedProps } from './App';
-import type { Item, View } from './types';
+import type { View } from './types';
 
 const unique = <T,>(values: T[]) => [...new Set(values)];
 const clean = (value?: string) => String(value || '').trim();
-const formulaKey = (item: Item) => clean(item.latex).replace(/\s+/g, '');
-const meaningfulVariables = (expression: string) => /[A-Za-z](?:_[{A-Za-z]|\b)/.test(expression.replace(/\\(?:text|mathrm)\s*\{[^}]*\}/g, '').replace(/\\(?:frac|sqrt|times|cdot|left|right|quad|le|ge|approx|circ|sum|implies|pi)\b/g, ''));
-function looksLikeWorkedCalculation(item: Item) {
-  const latex = clean(item.latex), parts = latex.split(/\s*(?:=|\\implies)\s*/);
-  const numericTokens = (latex.match(/(?<![_A-Za-z])\d+(?:\.\d+)?/g) || []).length;
-  const symbolicTokens = (latex.replace(/\\(?:text|mathrm)\s*\{[^}]*\}/g, '').match(/[A-Za-z](?:_[{A-Za-z]|\b)/g) || []).length;
-  return parts.length > 2 || (parts.length === 2 && !meaningfulVariables(parts[1]) && /\d/.test(parts[1])) || /(?:calculation|evaluation|substitution|solved|given|from statics|component equation)/i.test(item.title) || (numericTokens >= 4 && symbolicTokens <= 4);
-}
 
 function remindersFor(topic: string) {
   const name = topic.toLowerCase();
@@ -38,15 +30,15 @@ export function Guide({ state, filter, navigate }: SharedProps & { navigate: (vi
 
   const entries = scopedItems.filter(item => clean(item.topic) === selected);
   const concepts = entries.filter(item => item.kind === 'concept');
-  const trustedFormulas = entries.filter(item => item.kind === 'formula' && item.reviewed && !item.uncertain && item.equationScope !== 'case-specific' && !looksLikeWorkedCalculation(item)).filter((item, index, list) => list.findIndex(candidate => formulaKey(candidate) === formulaKey(item)) === index);
-  const pendingFormulas = entries.filter(item => item.kind === 'formula' && (!item.reviewed || item.uncertain || item.equationScope === 'case-specific' || looksLikeWorkedCalculation(item)));
-  const applications = unique(trustedFormulas.map(item => clean(item.conditions)).filter(Boolean));
+  const formulas = entries.filter(item => item.kind === 'formula');
+  const uncheckedCount = formulas.filter(item => !item.reviewed || item.uncertain).length;
+  const applications = unique(formulas.map(item => clean(item.conditions)).filter(Boolean));
   const examples = unique(scopedQuestions.filter(question => clean(question.topic) === selected).map(question => question.title)).slice(0, 6);
   const attempts = scopedAttempts.filter(attempt => clean(attempt.topic) === selected);
   const correct = attempts.filter(attempt => attempt.correct).length;
   const first = entries[0] || scopedQuestions.find(question => clean(question.topic) === selected);
 
-  if (!topics.length) return <Empty icon={<BookOpen size={30} />} title="Your study guide will grow from your materials" text="Add starter references or extract an uploaded file. CIVINCO will organize its concepts and reviewed formulas into topic lessons without another Gemini request." />;
+  if (!topics.length) return <Empty icon={<BookOpen size={30} />} title="Your study guide will grow from your materials" text="Add starter references or extract an uploaded file. CIVINCO will organize its concepts and formulas into topic lessons without another Gemini request." />;
 
   return <div className="guide-layout">
     <aside className="guide-index" aria-label="Study guide topics">
@@ -75,14 +67,14 @@ export function Guide({ state, filter, navigate }: SharedProps & { navigate: (vi
       </section>
 
       <section className="guide-section">
-        <div className="guide-section-title"><Lightbulb size={19} /><div><span>WHAT TO REMEMBER</span><h3>Governing relationships</h3></div></div>
-        {trustedFormulas.length ? <div className="guide-formulas">{trustedFormulas.map(formula => <div key={formula.id} className="guide-formula"><div><h4>{formula.title}</h4><MathText latex={formula.latex || ''} block /></div>{formula.variables?.length ? <dl>{formula.variables.map((variable, index) => <div key={`${variable.symbol}-${index}`}><dt><MathText latex={variable.symbol} /></dt><dd>{variable.meaning}{variable.unit && <small>{normalizeEngineeringText(variable.unit)}</small>}</dd></div>)}</dl> : null}<SourceLink doc={state.documents.find(document => document.id === formula.docId)} page={formula.page} /></div>)}</div> : <p className="guide-empty-note">There are no source-checked general equations for this topic yet. Pending or case-specific calculations stay out of this memory list until they are reviewed.</p>}
-        {!!pendingFormulas.length && <div className="guide-caution"><AlertTriangle size={17} /><span>{pendingFormulas.length} equation{pendingFormulas.length === 1 ? '' : 's'} omitted because {pendingFormulas.length === 1 ? 'it is' : 'they are'} awaiting review, uncertain, or specific to one worked problem.</span></div>}
+        <div className="guide-section-title"><Lightbulb size={19} /><div><span>WHAT TO REMEMBER</span><h3>Equations from your materials</h3></div></div>
+        {formulas.length ? <div className="guide-formulas">{formulas.map(formula => <div key={formula.id} className={`guide-formula ${formula.uncertain ? 'uncertain' : ''}`}><div><div><h4>{formula.title}</h4><span className={`guide-formula-status ${formula.reviewed && !formula.uncertain ? 'checked' : ''}`}>{formula.uncertain ? 'Notation uncertain' : formula.reviewed ? 'Source checked' : 'Not reviewed'}</span></div><MathText latex={formula.latex || ''} block /></div>{formula.variables?.length ? <dl>{formula.variables.map((variable, index) => <div key={`${variable.symbol}-${index}`}><dt><MathText latex={normalizeMathSymbol(variable.symbol)} /></dt><dd>{variable.meaning}{variable.unit && <small>{normalizeEngineeringText(variable.unit)}</small>}</dd></div>)}</dl> : null}{formula.conditions && <p className="guide-formula-condition"><strong>Use when</strong> <RichText text={formula.conditions} /></p>}<SourceLink doc={state.documents.find(document => document.id === formula.docId)} page={formula.page} /></div>)}</div> : <p className="guide-empty-note">No equations were extracted for this topic yet. Check the connected concept sources or add a formula manually.</p>}
+        {!!uncheckedCount && <div className="guide-caution"><AlertTriangle size={17} /><span>{uncheckedCount} equation{uncheckedCount === 1 ? ' is' : 's are'} shown with a review warning. Compare {uncheckedCount === 1 ? 'it' : 'them'} with the connected source before relying on the notation.</span></div>}
       </section>
 
       <section className="guide-section">
         <div className="guide-section-title"><Target size={19} /><div><span>APPLICATIONS</span><h3>Know when to use it</h3></div></div>
-        {applications.length || examples.length ? <div className="guide-applications">{applications.map(application => <div key={application}><CheckCircle2 size={15} /><span>{application}</span></div>)}{examples.map(example => <div key={example}><ClipboardCheck size={15} /><span>Practice example: {example}</span></div>)}</div> : <p className="guide-empty-note">Application notes will appear when reviewed formulas or practice problems are available for this topic.</p>}
+        {applications.length || examples.length ? <div className="guide-applications">{applications.map(application => <div key={application}><CheckCircle2 size={15} /><span><RichText text={application} /></span></div>)}{examples.map(example => <div key={example}><ClipboardCheck size={15} /><span>Practice example: {example}</span></div>)}</div> : <p className="guide-empty-note">Application notes will appear when formulas or practice problems are available for this topic.</p>}
       </section>
 
       <section className="guide-section guide-checklist">

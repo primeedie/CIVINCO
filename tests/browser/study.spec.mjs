@@ -42,6 +42,11 @@ test('complete review experience, rendered math, persistence, responsive layout 
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await expect(page.locator('.problem-panel h2')).toHaveText(/Friction|Mechanics of materials/);
   await expect(page.locator('.engineering-diagram')).toBeVisible();
+  await page.getByRole('button', { name: 'Report a problem with this question' }).click();
+  await page.getByLabel('What needs attention?').selectOption('units');
+  await page.getByLabel('Notes optional').fill('Check the displayed notation.');
+  await page.getByRole('button', { name: 'Save report', exact: true }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
   await page.getByLabel('Your answer').fill('-999');
   await page.getByRole('button', { name: 'Check answer', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'A useful step in learning.' })).toBeVisible();

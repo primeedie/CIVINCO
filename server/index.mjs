@@ -279,7 +279,7 @@ app.delete('/api/documents/:id', async (req, res) => {
   store.transaction(() => {
     const itemIds = new Set(store.all('items').filter(i => i.docId === doc.id).map(i => i.id));
     const qIds = new Set(store.all('questions').filter(q => q.sourceDocId === doc.id || q.sourceIds.some(id => itemIds.has(id))).map(q => q.id));
-    for (const [collection, predicate] of [['pages', p => p.docId === doc.id], ['items', i => itemIds.has(i.id)], ['questions', q => qIds.has(q.id)], ['attempts', a => qIds.has(a.questionId)], ['reviews', r => itemIds.has(r.itemId)]]) {
+    for (const [collection, predicate] of [['pages', p => p.docId === doc.id], ['items', i => itemIds.has(i.id)], ['questions', q => qIds.has(q.id)], ['attempts', a => qIds.has(a.questionId)], ['reviews', r => itemIds.has(r.itemId)], ['reports', report => qIds.has(report.questionId)]]) {
       for (const record of store.all(collection).filter(predicate)) store.remove(collection, record.id);
     }
     const active = activePractice(req.deviceId);
@@ -538,6 +538,15 @@ app.post('/api/questions/:id/solution', (req, res) => {
     store.put('attempts', attempt);
   }
   res.json({ correct: attempt.correct, numeric: attempt.answer, expected: q.answer, tolerance: q.tolerance, unit: q.unit, steps: q.steps, solutionQuality: q.solutionQuality, revealed: attempt.revealed });
+});
+app.post('/api/questions/:id/report', (req, res) => {
+  const question = requireVisibleQuestion(req.params.id, req);
+  const input = z.object({ category: z.enum(['question', 'figure', 'solution', 'units', 'other']), note: z.string().trim().max(700).default('') }).parse(req.body);
+  const id = `report:${req.deviceId}:${question.id}`;
+  const existing = store.get('reports', id);
+  const report = { id, ownerId: req.deviceId, questionId: question.id, title: question.title, topic: question.topic, spex: question.spex, set: question.set, sourceDocId: question.sourceDocId, sourcePage: question.sourcePage, category: input.category, note: input.note, status: 'open', createdAt: existing?.createdAt || new Date().toISOString(), updatedAt: new Date().toISOString() };
+  store.put('reports', report);
+  res.status(existing ? 200 : 201).json({ ok: true });
 });
 app.post('/api/reviews', (req, res) => {
   const { itemId, rating } = z.object({ itemId: z.string(), rating: z.enum(['again', 'hard', 'good', 'easy']) }).parse(req.body);
