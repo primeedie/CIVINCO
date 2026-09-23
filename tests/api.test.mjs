@@ -87,6 +87,10 @@ test('full local study workflow, source coverage, grading, review gates, persist
   assert.ok(imageBank.data.questions.every(question => question.diagram.image.url.endsWith('/diagram')));
   const sourceDiagram = await fetch(`http://127.0.0.1:${port}${imageBank.data.questions[1].diagram.image.url}`);
   assert.equal(sourceDiagram.status, 200); assert.match(sourceDiagram.headers.get('content-type'), /image\/png/);
+  const multiSetDraw = await api('/questions/generate', { spex: 'A', sets: [7, 8], mode: 'bank', count: 3, difficulty: 'Foundation', replace: true });
+  assert.equal(multiSetDraw.status, 200); assert.equal(multiSetDraw.data.questions.length, 3);
+  assert.deepEqual([...new Set(multiSetDraw.data.questions.map(question => question.set))], [7, 8]);
+  const retainedMultiSetQuestion = multiSetDraw.data.questions.find(question => question.set === 7);
   assert.equal((await api(`/documents/${imageBank.data.document.id}`, undefined, 'DELETE')).status, 200);
   assert.equal((await api(`/documents/${doc.id}/pages/1/review`, {})).status, 400);
   const newFormula = { docId: doc.id, page: 1, title: 'Force balance', topic: 'Statics', latex: String.raw`\sum F_x = 0`, variables: [{ symbol: 'F_x', meaning: 'Horizontal force component', unit: 'N' }], conditions: 'Static equilibrium', uncertain: false, note: '', reviewed: true };
@@ -104,7 +108,7 @@ test('full local study workflow, source coverage, grading, review gates, persist
   state = (await api('/state')).data;
   assert.equal(state.documents.length, 6); assert.equal(state.attempts.length, 2); assert.equal(state.reviews.length, 1);
   assert.equal(state.questions.some(question => question.id === bankQuestion.id), false);
-  assert.equal(state.questions.some(question => question.id === bankSessionQuestion.id && question.mode === 'bank'), true);
+  assert.equal(state.questions.some(question => question.id === retainedMultiSetQuestion.id && question.mode === 'bank'), true);
   assert.equal((await api(`/documents/${bankDoc.id}`, undefined, 'DELETE')).status, 200);
   state = (await api('/state')).data;
   assert.equal(state.questions.some(question => question.id === bankQuestion.id), false);

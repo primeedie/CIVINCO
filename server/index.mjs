@@ -89,7 +89,7 @@ const sanitizedDoc = ({ storageName, ...doc }, req) => ({ ...doc, editable: edit
 const settingsFor = req => access.privateValue(req, 'civinco_ai') || (req.deviceId === 'local-owner' ? localSettings : { geminiApiKey: '', model: process.env.GEMINI_MODEL || 'gemini-3.6-flash' });
 const publicSettings = req => { const settings = settingsFor(req); return { connected: Boolean(settings.geminiApiKey), model: settings.model }; };
 const aiFor = req => createAI(settingsFor(req));
-const safeError = error => error?.status === 401 || error?.status === 403 ? 'The Gemini API key was rejected or lacks access to this model. Update it in AI settings.' : error?.status === 429 ? 'Gemini is rate-limited or out of quota. Check billing, then retry.' : error?.status === 503 ? 'Gemini is temporarily busy. Wait a moment, then retry.' : String(error?.message || 'Request failed.').replace(/(?:AIza[\w-]+|AQ\.[\w-]+)/g, '[redacted]').slice(0, 700);
+const safeError = error => error?.status === 401 ? 'Gemini rejected this API key. Replace it in AI settings, then save and test the connection.' : error?.status === 403 ? 'This Gemini key or its Google project cannot use the selected model. Check the key restrictions and model access in AI settings.' : error?.status === 429 ? 'Gemini is rate-limited or out of quota. Check billing, then retry.' : error?.status === 503 ? 'Gemini is temporarily busy. Wait a moment, then retry.' : String(error?.message || 'Request failed.').replace(/(?:AIza[\w-]+|AQ\.[\w-]+)/g, '[redacted]').slice(0, 700);
 const updateDoc = (id, changes) => store.put('documents', { ...getDoc(id), ...changes });
 const activePractice = deviceId => store.get('meta', `active-practice:${deviceId}`) || { id: `active-practice:${deviceId}`, questionIds: [] };
 const setActivePractice = (questions, deviceId) => store.put('meta', { id: `active-practice:${deviceId}`, questionIds: questions.map(question => question.id), updatedAt: new Date().toISOString() });
@@ -457,32 +457,35 @@ app.post('/api/items', (req, res) => {
 
 let generating = false;
 app.post('/api/questions/generate', async (req, res) => {
-  const input = categorySchema.extend({ mode: z.enum(['ai', 'sample', 'bank', 'variant']), style: z.enum(['generated', 'source']).default('generated'), count: z.number().int().min(1).max(10), difficulty: z.enum(['Foundation', 'Board-level', 'Challenge']), replace: z.boolean().default(false) }).parse(req.body);
+  const input = categorySchema.omit({ set: true }).extend({ set: z.coerce.number().int().min(1).max(999).optional(), sets: z.array(z.coerce.number().int().min(1).max(999)).min(1).max(30).optional(), mode: z.enum(['ai', 'sample', 'bank', 'variant']), style: z.enum(['generated', 'source']).default('generated'), count: z.number().int().min(1).max(10), difficulty: z.enum(['Foundation', 'Board-level', 'Challenge']), replace: z.boolean().default(false) }).refine(value => value.set !== undefined || value.sets?.length, { message: 'Choose at least one Set.' }).parse(req.body);
+  const requestedSets = [...new Set(input.sets?.length ? input.sets : [input.set])];
+  const selectedSets = new Set(requestedSets);
+  const setLabel = requestedSets.length === 1 ? `Set ${requestedSets[0]}` : `Sets ${requestedSets.join(', ')}`;
   if (generating) throw fail('A question set is already being generated. Please wait.', 409);
   if (activePractice(req.deviceId).questionIds.length && !input.replace) throw fail('Confirm that you want to replace the current practice set.', 409);
   const sourceStyle = input.mode === 'ai' && input.style === 'source';
   if (input.mode === 'bank') {
-    const pool = store.all('questions').filter(question => question.pool && (!question.ownerId || question.ownerId === req.deviceId) && question.spex === input.spex && question.set === input.set);
-    if (pool.length < input.count) throw fail(`This permanent bank has ${pool.length} available problem${pool.length === 1 ? '' : 's'} for the selected SPEX and Set. Choose a smaller set.`);
+    const pool = store.all('questions').filter(question => question.pool && (!question.ownerId || question.ownerId === req.deviceId) && question.spex === input.spex && selectedSets.has(question.set));
+    if (pool.length < input.count) throw fail(`This permanent bank has ${pool.length} available problem${pool.length === 1 ? '' : 's'} across ${setLabel}. Choose fewer questions or more Sets.`);
     const shuffled = [...pool];
     for (let index = shuffled.length - 1; index > 0; index--) {
       const target = Math.floor(Math.random() * (index + 1));
       [shuffled[index], shuffled[target]] = [shuffled[target], shuffled[index]];
     }
-    const selected = shuffled.slice(0, input.count).sort((a, b) => (a.sourcePage || 0) - (b.sourcePage || 0));
+    const selected = shuffled.slice(0, input.count).sort((a, b) => a.set - b.set || (a.sourcePage || 0) - (b.sourcePage || 0));
     const createdAt = new Date().toISOString();
     const questions = selected.map(({ id: sourceBankQuestionId, pool: _pool, createdAt: _createdAt, ownerId: _ownerId, ...question }) => ({ ...question, id: randomUUID(), ownerId: req.deviceId, sourceBankQuestionId, pool: false, mode: 'bank', createdAt }));
     store.transaction(() => { questions.forEach(question => store.put('questions', question)); setActivePractice(questions, req.deviceId); });
     return res.json({ questions: questions.map(publicQuestion) });
   }
   if (input.mode === 'variant') {
-    const pool = store.all('questions').filter(question => question.pool && question.offlineVariant && (!question.ownerId || question.ownerId === req.deviceId) && question.spex === input.spex && question.set === input.set);
+    const pool = store.all('questions').filter(question => question.pool && question.offlineVariant && (!question.ownerId || question.ownerId === req.deviceId) && question.spex === input.spex && selectedSets.has(question.set));
     const questions = offlineVariants(pool, input.count).map(question => ({ ...question, ownerId: req.deviceId }));
-    if (questions.length !== input.count) throw fail('No offline variation templates are available for this SPEX and Set yet. Choose permanent-bank questions instead.');
+    if (questions.length !== input.count) throw fail(`No offline variation templates are available for ${setLabel} yet. Choose permanent-bank questions instead.`);
     store.transaction(() => { questions.forEach(question => store.put('questions', question)); setActivePractice(questions, req.deviceId); });
     return res.json({ questions: questions.map(publicQuestion) });
   }
-  const candidates = store.all('items').filter(i => visibleDoc(getDoc(i.docId), req) && i.spex === input.spex && i.set === input.set && (input.mode === 'sample' ? i.sample : !i.sample) && (sourceStyle || i.kind !== 'formula' || (i.reviewed && !i.uncertain && validLatex(i.latex))));
+  const candidates = store.all('items').filter(i => visibleDoc(getDoc(i.docId), req) && i.spex === input.spex && selectedSets.has(i.set) && (input.mode === 'sample' ? i.sample : !i.sample) && (sourceStyle || i.kind !== 'formula' || (i.reviewed && !i.uncertain && validLatex(i.latex))));
   if (!candidates.length) throw fail(input.mode === 'sample' ? 'Add starter references from Home first, and choose Set 1.' : sourceStyle ? 'No extracted source pages are available in this SPEX and Set.' : 'Extract files and approve formulas in this SPEX and Set first.');
   generating = true;
   try {
@@ -504,16 +507,16 @@ app.post('/api/questions/generate', async (req, res) => {
         pageIndex.push({ document: doc.name, page, entries: entries.map(item => ({ id: item.id, kind: item.kind, title: item.title, topic: item.topic, latex: item.latex })) });
       }
       const result = await aiFor(req).sourceQuestions(pageIndex, content, input.count);
-      questions = result.map(q => ({ ...q, id: randomUUID(), ownerId: req.deviceId, spex: input.spex, set: input.set, mode: 'source', createdAt: new Date().toISOString() }));
+      questions = result.map(q => { const source = candidates.find(item => q.sourceIds.includes(item.id)); return { ...q, id: randomUUID(), ownerId: req.deviceId, spex: input.spex, set: source?.set || requestedSets[0], mode: 'source', createdAt: new Date().toISOString() }; });
     } else {
       // Rotate a bounded source selection for generation; extraction itself is never truncated.
       const selected = [...candidates].sort(() => Math.random() - 0.5).slice(0, 30);
       const result = await aiFor(req).generate(selected, input.count, input.difficulty);
-      questions = result.map(q => ({ ...q, id: randomUUID(), ownerId: req.deviceId, spex: input.spex, set: input.set, mode: 'ai', createdAt: new Date().toISOString() }));
+      questions = result.map(q => { const source = candidates.find(item => q.sourceIds.includes(item.id)); return { ...q, id: randomUUID(), ownerId: req.deviceId, spex: input.spex, set: source?.set || requestedSets[0], mode: 'ai', createdAt: new Date().toISOString() }; });
     }
     if (!questions.length) throw fail('No suitable numerical practice templates were found.');
     if (questions.length !== input.count) throw fail(`Only ${questions.length} complete questions were produced. Your current practice set was kept; try again.`);
-    if (questions.some(q => q.sourceIds.some(id => { const item = store.get('items', id); return !item || item.spex !== input.spex || item.set !== input.set; }))) throw fail('A source was removed or recategorized while generating. Generate a fresh set from the current materials.', 409);
+    if (questions.some(q => q.sourceIds.some(id => { const item = store.get('items', id); return !item || item.spex !== input.spex || !selectedSets.has(item.set); }))) throw fail('A source was removed or recategorized while generating. Generate a fresh set from the current materials.', 409);
     store.transaction(() => { questions.forEach(q => store.put('questions', q)); setActivePractice(questions, req.deviceId); });
     res.json({ questions: questions.map(publicQuestion) });
   } finally { generating = false; }
