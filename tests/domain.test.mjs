@@ -7,7 +7,7 @@ import { createStore } from '../server/store.mjs';
 import { gradeAnswer, reviewSchedule, validLatex, publicQuestion } from '../server/domain.mjs';
 import { addSamples, sampleQuestions } from '../server/samples.mjs';
 import { createAI } from '../server/ai.mjs';
-import { offlineVariants } from '../server/variants.mjs';
+import { buildOfflineVariant, offlineVariants } from '../server/variants.mjs';
 
 test('numeric grading accepts scientific notation, rounding boundaries and Unicode minus', () => {
   assert.equal(gradeAnswer('1.25e2', 125, 0.01).correct, true);
@@ -82,6 +82,17 @@ test('offline variations recalculate supported figure-free problems without AI',
       assert.equal(question.steps.every(step => !step.latex || validLatex(step.latex)), true, offlineVariant);
       assert.ok(Math.abs(question.answer - independentlySolve(question)) <= question.tolerance, `${offlineVariant}: recalculated answer must match changed givens`);
     }
+  }
+});
+test('expanded offline variation families produce finite answers and valid worked notation', () => {
+  const kinds = ['hydraulic-jack', 'barometer-height', 'iceberg-volume', 'barge-draft', 'soil-zero-void', 'moist-unit-weight', 'bus-speed', 'polygon-diagonals', 'work-rate', 'father-son', 'exponential-wait', 'binomial-exact', 'hooke-spring', 'rectangle-semicircle', 'rectangle-ellipse', 'stopping-friction', 'superelevation', 'centripetal-force', 'accident-rate', 'footing-base-pressure', 'two-to-one-spread'];
+  for (const offlineVariant of kinds) for (let iteration = 0; iteration < 25; iteration++) {
+    const question = buildOfflineVariant({ id: offlineVariant, offlineVariant, title: 'Source', topic: 'Topic', spex: 'A', set: 1, sourceIds: [], sourceDocId: 'doc', sourcePage: 1 });
+    assert.ok(question, offlineVariant);
+    assert.equal(Number.isFinite(question.answer), true, offlineVariant);
+    assert.equal(question.answer >= 0, true, offlineVariant);
+    assert.equal(question.steps.every(step => !step.latex || validLatex(step.latex)), true, offlineVariant);
+    assert.match(question.prompt, /\d/);
   }
 });
 test('durable store, sample symbol fidelity, all sample question families and rollback', () => {

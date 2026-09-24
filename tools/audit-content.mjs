@@ -25,6 +25,7 @@ const missingFigures = questions.filter(question => figureWords.test(question.pr
 const numericFormulas = items.filter(item => item.kind === 'formula' && /=/.test(item.latex || '') && /\d/.test(item.latex || ''));
 const formulas = items.filter(item => item.kind === 'formula');
 const invalidFormulas = formulas.filter(item => !validLatex(item.latex || ''));
+const invalidSolutionSteps = questions.flatMap(question => (question.steps || []).filter(step => step.latex && !validLatex(step.latex)).map(step => ({ question, latex: step.latex })));
 const unresolvedSolutions = questions.filter(question => question.pool && question.solutionQuality !== 'worked');
 const componentFormulas = items.filter(item => item.kind === 'formula' && /(?:component|x-axis|y-axis|z-axis|3d|equilibrium)/i.test(`${item.title} ${item.topic} ${item.conditions}`));
 const figureGroups = [...new Set(questions.filter(question => question.pool && question.sourceDocId).map(question => question.sourceDocId))].map(docId => {
@@ -32,12 +33,13 @@ const figureGroups = [...new Set(questions.filter(question => question.pool && q
   return { document: documents.get(docId)?.name, withImages: entries.filter(question => question.diagramImage?.visualAid).length, withoutImages: entries.filter(question => !question.diagramImage?.visualAid).length, questions: entries.map(question => ({ page: question.sourcePage, title: question.title, hasImage: Boolean(question.diagramImage?.visualAid), prompt: question.prompt })) };
 }).filter(group => group.withImages && group.withoutImages);
 const audit = {
-  totals: { questions: questions.length, items: items.length, formulas: formulas.length, missingFigures: missingFigures.length, invalidFormulas: invalidFormulas.length, uncertainFormulas: formulas.filter(item => item.uncertain).length, unreviewedFormulas: formulas.filter(item => !item.reviewed).length, numericFormulas: numericFormulas.length, componentFormulas: componentFormulas.length, unresolvedSolutions: unresolvedSolutions.length, openReports: reports.filter(report => report.status === 'open').length },
+  totals: { questions: questions.length, items: items.length, formulas: formulas.length, missingFigures: missingFigures.length, invalidFormulas: invalidFormulas.length, invalidSolutionSteps: invalidSolutionSteps.length, uncertainFormulas: formulas.filter(item => item.uncertain).length, unreviewedFormulas: formulas.filter(item => !item.reviewed).length, numericFormulas: numericFormulas.length, componentFormulas: componentFormulas.length, unresolvedSolutions: unresolvedSolutions.length, openReports: reports.filter(report => report.status === 'open').length },
   missingFigures: missingFigures.map(question => ({ id: question.id, title: question.title, prompt: question.prompt, document: documents.get(question.sourceDocId)?.name, page: question.sourcePage, pool: question.pool })),
   mixedFigureGroups: figureGroups,
   componentFormulas: componentFormulas.map(item => ({ id: item.id, title: item.title, latex: item.latex, document: documents.get(item.docId)?.name, page: item.page })),
   numericFormulas: numericFormulas.slice(0, 100).map(item => ({ id: item.id, title: item.title, latex: item.latex, document: documents.get(item.docId)?.name, page: item.page })),
   unresolvedSolutions: unresolvedSolutions.map(question => ({ id: question.id, title: question.title, topic: question.topic, quality: question.solutionQuality || 'unspecified', document: documents.get(question.sourceDocId)?.name, page: question.sourcePage })),
+  invalidSolutionSteps: invalidSolutionSteps.map(({ question, latex }) => ({ id: question.id, title: question.title, latex })),
 };
 const unresolvedSummary = Object.values(unresolvedSolutions.reduce((groups, question) => {
   const document = documents.get(question.sourceDocId)?.name || 'Unknown source';

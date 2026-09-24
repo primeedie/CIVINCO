@@ -95,9 +95,16 @@ export function normalizeEngineeringText(text: string) {
     .replace(/\b(m|ft)\s*\/\s*s\s*\^?\s*2\b/gi, '$1/s²')
     .replace(/\b(kg|kN|N)\s*\/\s*(mm|cm|m|ft)\s*\^?\s*([23])\b/gi, (_, force, unit, power) => `${force}/${unit}${power === '2' ? '²' : '³'}`)
     .replace(/\b(kN|N)\s*-\s*m\b/g, '$1·m')
+    .replace(/(\d)\s*[xX]\s*(?=\d)/g, '$1 × ')
+    .replace(/\b(\d+(?:\.\d+)?)\s*degrees?\b/gi, '$1°')
+    .replace(/\b([A-Za-z])\s*\^\s*([234])\b/g, (_, symbol, power) => `${symbol}${({ 2: '²', 3: '³', 4: '⁴' } as Record<string, string>)[power]}`)
     .replace(/(\d),\s+(\d{3})\b/g, '$1,$2')
     .replace(/(\d)\s*(kN|MN|N|kPa|MPa|GPa|Pa|mm|cm|km|m|L\/s)\b/g, '$1 $2')
     .replace(/\bx\s*10\s*\^\s*([+-]?\d+)/gi, '×10^$1');
+}
+export function ProblemPrompt({ text }: { text: string }) {
+  const paragraphs = normalizeEngineeringText(text).split(/(?<=[A-Za-z)%°])\.\s+(?=[A-Z])/).map(part => part.trim()).filter(Boolean);
+  return <div className="problem-prompt">{paragraphs.map((paragraph, index) => <p key={index}><RichText text={paragraph.endsWith('.') || index === paragraphs.length - 1 ? paragraph : `${paragraph}.`} /></p>)}</div>;
 }
 export function normalizeMathSymbol(symbol: string) {
   if (String(symbol || '').includes('\\')) return String(symbol || '').trim();
