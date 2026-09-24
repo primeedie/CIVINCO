@@ -69,6 +69,14 @@ test('full local study workflow, source coverage, grading, review gates, persist
   assert.equal(bankQuestion.mode, 'bank'); assert.equal('answer' in bankQuestion, false); assert.equal(bankQuestion.sourceDocId, bankDoc.id);
   state = (await api('/state')).data;
   assert.equal(state.questions.some(question => question.id === bankQuestion.id), false);
+  const guideProblems = await api('/guide/problems?spex=A&set=7');
+  assert.equal(guideProblems.status, 200); assert.equal(guideProblems.data.questions.length, 1); assert.equal('answer' in guideProblems.data.questions[0], false);
+  const openedGuideProblem = await api(`/guide/problems/${bankQuestion.id}/open`, { replace: true });
+  assert.equal(openedGuideProblem.status, 200); assert.notEqual(openedGuideProblem.data.question.id, bankQuestion.id);
+  const unconfirmedGuideReplacement = await api(`/guide/problems/${bankQuestion.id}/open`, {});
+  assert.equal(unconfirmedGuideReplacement.status, 409);
+  const confirmedGuideReplacement = await api(`/guide/problems/${bankQuestion.id}/open`, { replace: true });
+  assert.equal(confirmedGuideReplacement.status, 200);
   const unconfirmedReplacement = await api('/questions/generate', { spex: 'A', set: 7, mode: 'bank', count: 1, difficulty: 'Foundation' });
   assert.equal(unconfirmedReplacement.status, 409);
   const bankDraw = await api('/questions/generate', { spex: 'A', set: 7, mode: 'bank', count: 1, difficulty: 'Foundation', replace: true });

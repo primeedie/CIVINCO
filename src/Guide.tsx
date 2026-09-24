@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, ArrowRight, BookCheck, BookOpen, CheckCircle2, ClipboardCheck, Lightbulb, ListChecks, Target } from 'lucide-react';
-import { Badge, Empty, MathText, normalizeEngineeringText, normalizeMathSymbol, RichText, SourceLink } from './components';
+import { api, Badge, Empty, EngineeringDiagram, MathText, Modal, normalizeEngineeringText, normalizeMathSymbol, RichText, SourceLink, Status } from './components';
 import type { SharedProps } from './App';
 import { categoryPosition, compareByPdfOrder, sourceCategory, type GuideRecord } from './studyCategories';
-import type { View } from './types';
+import type { Question, View } from './types';
 
 const unique = <T,>(values: T[]) => [...new Set(values)];
 const clean = (value?: string) => String(value || '').trim();
@@ -21,7 +21,8 @@ function remindersFor(topic: string) {
   return ['List the givens, the required quantity, and the assumptions before choosing an equation.', 'Use one consistent unit system and write units beside intermediate results.', 'Check the answer against the expected sign, scale, and physical behavior.'];
 }
 
-export function Guide({ state, filter, navigate }: SharedProps & { navigate: (view: View) => void }) {
+export function Guide({ state, filter, refresh, navigate }: SharedProps & { navigate: (view: View) => void }) {
+  const [bankExamples, setBankExamples] = useState<Question[]>([]), [pendingExample, setPendingExample] = useState<Question | null>(null), [openingExample, setOpeningExample] = useState(''), [exampleError, setExampleError] = useState('');
   const scopedItems = filter(state.items);
   const scopedQuestions = filter(state.questions);
   const scopedAttempts = filter(state.attempts).filter(attempt => !attempt.revealed);
@@ -38,11 +39,30 @@ export function Guide({ state, filter, navigate }: SharedProps & { navigate: (vi
   const applications = unique(formulas.map(item => clean(item.conditions)).filter(Boolean));
   const categoryQuestions = scopedQuestions.filter(question => sourceCategory(question, state.documents) === selected).sort((a, b) => a.spex.localeCompare(b.spex) || a.set - b.set || (documentOrder.get(a.sourceDocId || '') ?? 9999) - (documentOrder.get(b.sourceDocId || '') ?? 9999) || (a.sourcePage || 0) - (b.sourcePage || 0));
   const categoryTopics = unique([...entries.map(item => clean(item.topic)), ...categoryQuestions.map(question => clean(question.topic))].filter(Boolean));
-  const examples = unique(categoryQuestions.map(question => question.title)).slice(0, 6);
   const topicCategories = new Map(records.map(record => [clean(record.topic), sourceCategory(record, state.documents)]));
   const attempts = scopedAttempts.filter(attempt => topicCategories.get(clean(attempt.topic)) === selected);
   const correct = attempts.filter(attempt => attempt.correct).length;
   const first = entries[0] || categoryQuestions[0];
+  useEffect(() => {
+    let cancelled = false;
+    if (!first) { setBankExamples([]); return; }
+    setBankExamples([]);
+    setExampleError('');
+    api<{ questions: Question[] }>(`/guide/problems?spex=${first.spex}&set=${first.set}`).then(result => { if (!cancelled) setBankExamples(result.questions); }).catch(error => { if (!cancelled) { setBankExamples([]); setExampleError((error as Error).message); } });
+    return () => { cancelled = true; };
+  }, [selected, first?.spex, first?.set]);
+  const sampleProblems = bankExamples.filter(question => sourceCategory(question, state.documents) === selected).slice(0, 3);
+  async function openExample(question: Question, replace = false) {
+    setOpeningExample(question.id); setExampleError('');
+    try {
+      const result = await api<{ question: Question }>(`/guide/problems/${question.id}/open`, { replace });
+      localStorage.setItem('civinco-active-problem', result.question.id);
+      await refresh();
+      setPendingExample(null);
+      navigate('practice');
+    } catch (error) { setExampleError((error as Error).message); }
+    finally { setOpeningExample(''); }
+  }
 
   if (!categories.length) return <Empty icon={<BookOpen size={30} />} title="Your study guide will grow from your materials" text="Add starter references or extract an uploaded file. CIVINCO will organize its concepts and formulas into topic lessons without another Gemini request." />;
 
@@ -80,7 +100,13 @@ export function Guide({ state, filter, navigate }: SharedProps & { navigate: (vi
 
       <section className="guide-section">
         <div className="guide-section-title"><Target size={19} /><div><span>APPLICATIONS</span><h3>Know when to use it</h3></div></div>
-        {applications.length || examples.length ? <div className="guide-applications">{applications.map(application => <div key={application}><CheckCircle2 size={15} /><span><RichText text={application} /></span></div>)}{examples.map(example => <div key={example}><ClipboardCheck size={15} /><span>Practice example: {example}</span></div>)}</div> : <p className="guide-empty-note">Application notes will appear when formulas or practice problems are available for this topic.</p>}
+        {applications.length ? <div className="guide-applications">{applications.map(application => <div key={application}><CheckCircle2 size={15} /><span><RichText text={application} /></span></div>)}</div> : <p className="guide-empty-note">Application notes will appear when formulas are available for this PDF section.</p>}
+      </section>
+
+      <section className="guide-section">
+        <div className="guide-section-title"><ClipboardCheck size={19} /><div><span>SAMPLE PROBLEMS</span><h3>Apply the section</h3></div></div>
+        {exampleError && <Status>{exampleError}</Status>}
+        {sampleProblems.length ? <div className="guide-examples">{sampleProblems.map((question, index) => <article key={question.id} className="guide-example"><div className="guide-example-heading"><span>{String(index + 1).padStart(2, '0')}</span><div><h4>{question.title}</h4><small>From the permanent problem bank · no Gemini usage</small></div></div><div className="guide-example-prompt"><RichText text={question.prompt} /></div><EngineeringDiagram diagram={question.diagram} /><SourceLink doc={state.documents.find(document => document.id === question.sourceDocId)} page={question.sourcePage || 1} /><button className="button secondary" disabled={openingExample === question.id} onClick={() => state.questions.length ? setPendingExample(question) : openExample(question)}>{openingExample === question.id ? 'Opening…' : 'Open in Practice'} <ArrowRight size={15} /></button></article>)}</div> : <p className="guide-empty-note">No permanent-bank sample problem is available for this PDF section yet.</p>}
       </section>
 
       <section className="guide-section guide-checklist">
@@ -90,5 +116,6 @@ export function Guide({ state, filter, navigate }: SharedProps & { navigate: (vi
 
       <nav className="guide-actions" aria-label="Continue studying"><button className="button secondary" onClick={() => navigate('library')}>Open formulas <ArrowRight size={15} /></button><button className="button secondary" onClick={() => navigate('flashcards')}>Review flashcards <ArrowRight size={15} /></button><button className="button primary" onClick={() => navigate('practice')}>Practice this material <ArrowRight size={15} /></button></nav>
     </article>
+    {pendingExample && <Modal title="Open this sample in Practice?" onClose={() => setPendingExample(null)}><p className="modal-intro">Your current {state.questions.length}-question practice set will be replaced by this sample problem. Completed results remain in Progress.</p><div className="modal-actions"><button className="button secondary" onClick={() => setPendingExample(null)}>Keep current set</button><button className="button primary" disabled={Boolean(openingExample)} onClick={() => openExample(pendingExample, true)}>{openingExample ? 'Opening…' : 'Open sample problem'}</button></div></Modal>}
   </div>;
 }

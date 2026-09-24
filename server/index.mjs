@@ -456,6 +456,27 @@ app.post('/api/items', (req, res) => {
 });
 
 let generating = false;
+app.get('/api/guide/problems', (req, res) => {
+  const input = categorySchema.parse(req.query);
+  const visibleDocuments = new Set(store.all('documents').filter(document => visibleDoc(document, req)).map(document => document.id));
+  const questions = store.all('questions')
+    .filter(question => question.pool && question.spex === input.spex && question.set === input.set && (!question.ownerId || question.ownerId === req.deviceId) && (!question.sourceDocId || visibleDocuments.has(question.sourceDocId)))
+    .sort((a, b) => (a.sourcePage || 0) - (b.sourcePage || 0) || a.title.localeCompare(b.title))
+    .slice(0, 200)
+    .map(publicQuestion);
+  res.json({ questions });
+});
+app.post('/api/guide/problems/:id/open', (req, res) => {
+  const input = z.object({ replace: z.boolean().default(false) }).parse(req.body);
+  const source = requireVisibleQuestion(req.params.id, req);
+  if (!source.pool) throw fail('This study example is no longer in the permanent problem bank.', 409);
+  if (source.sourceDocId) requireVisibleDoc(source.sourceDocId, req);
+  if (activePractice(req.deviceId).questionIds.length && !input.replace) throw fail('Confirm that you want to replace the current practice set.', 409);
+  const { id: sourceBankQuestionId, pool: _pool, createdAt: _createdAt, ownerId: _ownerId, ...question } = source;
+  const opened = { ...question, id: randomUUID(), ownerId: req.deviceId, sourceBankQuestionId, pool: false, mode: 'bank', createdAt: new Date().toISOString() };
+  store.transaction(() => { store.put('questions', opened); setActivePractice([opened], req.deviceId); });
+  res.json({ question: publicQuestion(opened) });
+});
 app.post('/api/questions/generate', async (req, res) => {
   const input = categorySchema.omit({ set: true }).extend({ set: z.coerce.number().int().min(1).max(999).optional(), sets: z.array(z.coerce.number().int().min(1).max(999)).min(1).max(30).optional(), mode: z.enum(['ai', 'sample', 'bank', 'variant']), style: z.enum(['generated', 'source']).default('generated'), count: z.number().int().min(1).max(10), difficulty: z.enum(['Foundation', 'Board-level', 'Challenge']), replace: z.boolean().default(false) }).refine(value => value.set !== undefined || value.sets?.length, { message: 'Choose at least one Set.' }).parse(req.body);
   const requestedSets = [...new Set(input.sets?.length ? input.sets : [input.set])];

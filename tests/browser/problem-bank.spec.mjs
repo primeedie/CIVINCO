@@ -64,5 +64,18 @@ test('imports and studies an ordered illustrated problem bank without Gemini', a
   await expect(page.getByText(/A channel carries 42/)).toBeVisible();
   await expect(page.getByRole('heading', { name: 'You got it.' })).toBeVisible();
   await expect(page.getByLabel('Your answer')).toHaveCount(0);
+
+  await page.getByRole('button', { name: 'Study Guide', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Hydraulics', exact: true })).toBeVisible();
+  await expect(page.getByText('SAMPLE PROBLEMS', { exact: true })).toBeVisible();
+  await expect(page.locator('.guide-example')).toHaveCount(3);
+  await expect(page.locator('.guide-example .source-diagram img').first()).toHaveAttribute('alt', 'Original channel diagram');
+  await page.locator('.guide-example').first().getByRole('button', { name: 'Open in Practice', exact: true }).click();
+  const sampleDialog = page.getByRole('dialog', { name: 'Open this sample in Practice?' });
+  await expect(sampleDialog).toBeVisible();
+  await sampleDialog.getByRole('button', { name: 'Open sample problem', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Hydraulics', exact: true })).toBeVisible();
+  await expect(page.locator('.question-list>button')).toHaveCount(1);
+  await expect(page.locator('.source-diagram img')).toHaveAttribute('alt', 'Original channel diagram');
   expect(errors).toEqual([]);
 });

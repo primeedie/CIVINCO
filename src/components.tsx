@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, type ReactNode } from 'react';
 import katex from 'katex';
 import { X, Check, ChevronRight, FileText, AlertCircle } from 'lucide-react';
-import { SPEX, type Source, type Spex } from './types';
+import { SPEX, type Diagram, type Source, type Spex } from './types';
 
 export async function api<T = { ok: boolean }>(url: string, body?: unknown, method?: string): Promise<T> {
   const form = body instanceof FormData;
@@ -9,6 +9,25 @@ export async function api<T = { ok: boolean }>(url: string, body?: unknown, meth
   const result = await response.json();
   if (!response.ok) throw new Error(result.error || 'Something went wrong. Try again.');
   return result;
+}
+export function EngineeringDiagram({ diagram }: { diagram?: Diagram }) {
+  const marker = `arrow-${useId().replace(/:/g, '')}`;
+  if (diagram?.image) return <figure className="engineering-diagram source-diagram"><img src={diagram.image.url} alt={diagram.image.alt} loading="lazy" />{diagram.image.caption && <figcaption>{diagram.image.caption}</figcaption>}</figure>;
+  if (!diagram || ![...diagram.lines, ...diagram.arrows, ...diagram.circles, ...diagram.rectangles, ...diagram.labels].length) return null;
+  const clamp = (value: number) => Math.max(0, Math.min(100, Number.isFinite(value) ? value : 0));
+  return <figure className="engineering-diagram" aria-label={diagram.title || 'Problem diagram'}>
+    {diagram.title && <strong>{diagram.title}</strong>}
+    <svg viewBox="0 0 100 100" role="img" aria-labelledby={`${marker}-title ${marker}-desc`}>
+      <title id={`${marker}-title`}>{diagram.title || 'Engineering diagram'}</title><desc id={`${marker}-desc`}>{diagram.caption || 'Diagram accompanying the problem statement'}</desc>
+      <defs><marker id={marker} viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" /></marker></defs>
+      {diagram.rectangles.map((shape, i) => <rect key={`r${i}`} x={clamp(shape.x)} y={clamp(shape.y)} width={clamp(shape.width)} height={clamp(shape.height)} className={shape.filled ? 'filled' : ''} />)}
+      {diagram.lines.map((line, i) => <line key={`l${i}`} x1={clamp(line.x1)} y1={clamp(line.y1)} x2={clamp(line.x2)} y2={clamp(line.y2)} className={line.dashed ? 'dashed' : ''} />)}
+      {diagram.arrows.map((line, i) => <line key={`a${i}`} x1={clamp(line.x1)} y1={clamp(line.y1)} x2={clamp(line.x2)} y2={clamp(line.y2)} className={line.dashed ? 'diagram-arrow dashed' : 'diagram-arrow'} markerEnd={`url(#${marker})`} />)}
+      {diagram.circles.map((shape, i) => <circle key={`c${i}`} cx={clamp(shape.cx)} cy={clamp(shape.cy)} r={Math.max(0, Math.min(50, shape.r))} className={shape.filled ? 'filled' : ''} />)}
+      {diagram.labels.map((label, i) => <text key={`t${i}`} x={clamp(label.x)} y={clamp(label.y)} textAnchor={label.align}>{label.text}</text>)}
+    </svg>
+    {diagram.caption && <figcaption>{diagram.caption}</figcaption>}
+  </figure>;
 }
 function VectorContextDiagram({ latex }: { latex: string }) {
   const id = useId().replace(/:/g, '');
