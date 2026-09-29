@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, type ReactNode } from 'react';
+import { memo, useEffect, useId, useRef, type ReactNode } from 'react';
 import katex from 'katex';
 import { X, Check, ChevronRight, FileText, AlertCircle } from 'lucide-react';
 import { SPEX, type Diagram, type Source, type Spex } from './types';
@@ -12,7 +12,7 @@ export async function api<T = { ok: boolean }>(url: string, body?: unknown, meth
 }
 export function EngineeringDiagram({ diagram }: { diagram?: Diagram }) {
   const marker = `arrow-${useId().replace(/:/g, '')}`;
-  if (diagram?.image) return <figure className="engineering-diagram source-diagram"><img src={diagram.image.url} alt={diagram.image.alt} loading="lazy" />{diagram.image.caption && <figcaption>{diagram.image.caption}</figcaption>}</figure>;
+  if (diagram?.image) return <figure className="engineering-diagram source-diagram"><a href={diagram.image.url} target="_blank" rel="noreferrer" title="Open full-size source figure"><img src={diagram.image.url} alt={diagram.image.alt} loading="lazy" /></a>{diagram.image.caption && <figcaption>{diagram.image.caption}</figcaption>}</figure>;
   if (!diagram || ![...diagram.lines, ...diagram.arrows, ...diagram.circles, ...diagram.rectangles, ...diagram.labels].length) return null;
   const clamp = (value: number) => Math.max(0, Math.min(100, Number.isFinite(value) ? value : 0));
   return <figure className="engineering-diagram" aria-label={diagram.title || 'Problem diagram'}>
@@ -39,7 +39,7 @@ function VectorContextDiagram({ latex }: { latex: string }) {
   const hasAngles = /theta_[xyz]|theta\s*_\s*\{[xyz]\}/.test(latex);
   const description = isMoment ? 'Moment of a force about the origin' : isPosition ? 'Position vector in Cartesian coordinates' : isLambda ? 'Force magnitude and its unit direction vector' : hasAngles ? 'Force direction angles and Cartesian components' : 'Force in Cartesian component form';
   return <figure className="formula-context-diagram">
-    <svg viewBox="0 0 560 350" role="img" aria-label={`${description}. All variables shown in the equation are labeled.`}>
+    <svg viewBox="0 0 560 350" role="img" aria-label={`${description}. Axis unit vectors and components are labeled.`}>
       <defs>
         <marker id={marker} markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" /></marker>
         <marker id={angleMarker} markerWidth="5" markerHeight="5" refX="4" refY="2.5" orient="auto"><path d="M0,0 L5,2.5 L0,5 Z" /></marker>
@@ -59,7 +59,7 @@ function VectorContextDiagram({ latex }: { latex: string }) {
       </g>
       {!isMoment && <g className="context-components">
         <line x1="160" y1="275" x2="93" y2="304" /><line x1="93" y1="304" x2="330" y2="304" /><line x1="330" y1="304" x2="330" y2="121" />
-        <text x="70" y="286">{isPosition ? 'x i' : 'Fₓ i'}</text><text x="205" y="329">{isPosition ? 'y j' : 'Fᵧ j'}</text><text x="340" y="211">{isPosition ? 'z k' : 'F_z k'}</text>
+        <text x="70" y="286">{isPosition ? 'x i' : 'Fₓ i'}</text><text x="205" y="329">{isPosition ? 'y j' : 'Fᵧ j'}</text><text x="340" y="211">{isPosition ? 'z k' : 'Fz k'}</text>
       </g>}
       {isMoment && <>
         <line className="position-vector" x1="160" y1="275" x2="302" y2="176" markerEnd={`url(#${marker})`} />
@@ -68,9 +68,9 @@ function VectorContextDiagram({ latex }: { latex: string }) {
         <text className="position-label" x="220" y="220">r</text><text className="vector-label" x="365" y="118">F</text><text className="moment-label" x="241" y="229">M = r × F</text>
       </>}
       {!isMoment && <>
-        <line className={isPosition ? 'position-vector' : 'context-vector'} x1="160" y1="275" x2="397" y2="92" markerEnd={`url(#${marker})`} />
-        <text className={isPosition ? 'position-label' : 'vector-label'} x="284" y="163">{isPosition ? 'r' : 'F'}</text>
-        {isLambda && <><line className="lambda-vector" x1="160" y1="275" x2="279" y2="183" markerEnd={`url(#${marker})`} /><text className="lambda-label" x="205" y="209">λ (unit direction)</text><text className="lambda-label" x="365" y="55">F = Fλ</text></>}
+        <line className={isPosition ? 'position-vector' : 'context-vector'} x1="160" y1="275" x2="330" y2="121" markerEnd={`url(#${marker})`} />
+        <text className={isPosition ? 'position-label' : 'vector-label'} x="260" y="172">{isPosition ? 'r' : 'F'}</text>
+        {isLambda && <><line className="lambda-vector" x1="160" y1="275" x2="228" y2="213" markerEnd={`url(#${marker})`} /><text className="lambda-label" x="184" y="229">λ (unit direction)</text><text className="lambda-label" x="365" y="55">F = Fλ</text></>}
         {hasAngles && <g className="angle-labels"><path d="M205 275 A45 45 0 0 0 192 246" /><text x="205" y="257">θᵧ</text><path d="M160 223 A52 52 0 0 1 191 234" /><text x="171" y="213">θ_z</text><path d="M128 289 A36 36 0 0 1 142 250" /><text x="112" y="258">θₓ</text></g>}
       </>}
       <circle cx="160" cy="275" r="5" className="context-joint" />
@@ -79,13 +79,13 @@ function VectorContextDiagram({ latex }: { latex: string }) {
   </figure>;
 }
 
-export function MathText({ latex, block = false, contextDiagram = false }: { latex: string; block?: boolean; contextDiagram?: boolean }) {
+export const MathText = memo(function MathText({ latex, block = false, contextDiagram = false }: { latex: string; block?: boolean; contextDiagram?: boolean }) {
   let html;
   try { html = katex.renderToString(latex, { displayMode: block, throwOnError: true, trust: false, strict: 'error', output: 'htmlAndMathml' }); }
   catch { return <span className="math-error"><AlertCircle size={15} /> Notation needs correction: <code>{latex}</code></span>; }
-  const needsVectorContext = contextDiagram && block && /(?:\\vec|\\mathbf|F_[xyz]|R_[xyz]|theta_[xyz]|\\lambda|\\times|\\begin\{vmatrix\})/s.test(latex);
+  const needsVectorContext = contextDiagram && block && /(?:\\(?:vec|mathbf)\s*\{?[FrRM]|[FR]_\{?[xyz]|theta_\{?[xyz]|\\lambda|\\begin\{vmatrix\})/s.test(latex);
   return <><span className={block ? 'math-block' : 'math-inline'} dangerouslySetInnerHTML={{ __html: html }} />{needsVectorContext && <VectorContextDiagram latex={latex} />}</>;
-}
+});
 export function normalizeEngineeringText(text: string) {
   return String(text || '')
     .replace(/\b(?:sq\.?|square)\s*(mm|cm|m|km|ft|in)\b/gi, '$1²')
@@ -103,7 +103,7 @@ export function normalizeEngineeringText(text: string) {
     .replace(/\bx\s*10\s*\^\s*([+-]?\d+)/gi, '×10^$1');
 }
 export function ProblemPrompt({ text }: { text: string }) {
-  const paragraphs = normalizeEngineeringText(text).split(/(?<=[A-Za-z)%°])\.\s+(?=[A-Z])/).map(part => part.trim()).filter(Boolean);
+  const paragraphs = text.split(/(?<=[A-Za-z)%°])\.\s+(?=[A-Z])/).map(part => part.trim()).filter(Boolean);
   return <div className="problem-prompt">{paragraphs.map((paragraph, index) => <p key={index}><RichText text={paragraph.endsWith('.') || index === paragraphs.length - 1 ? paragraph : `${paragraph}.`} /></p>)}</div>;
 }
 export function normalizeMathSymbol(symbol: string) {
@@ -123,8 +123,8 @@ export function normalizeMathSymbol(symbol: string) {
 }
 // Render only explicitly delimited mathematics; surrounding source text stays escaped.
 export function RichText({ text }: { text: string }) {
-  const parts = normalizeEngineeringText(text).split(/(\$\$[\s\S]*?\$\$|\$[^$\n]+\$|\\\([\s\S]*?\\\)|\\\[[\s\S]*?\\\])/g);
-  return <>{parts.map((part, n) => part.startsWith('$$') || part.startsWith('\\[') ? <MathText key={n} latex={part.slice(2, -2)} block /> : part.startsWith('$') ? <MathText key={n} latex={part.slice(1, -1)} /> : part.startsWith('\\(') ? <MathText key={n} latex={part.slice(2, -2)} /> : <span key={n}>{part}</span>)}</>;
+  const parts = text.split(/(\$\$[\s\S]*?\$\$|\$[^$\n]+\$|\\\([\s\S]*?\\\)|\\\[[\s\S]*?\\\])/g);
+  return <>{parts.map((part, n) => part.startsWith('$$') || part.startsWith('\\[') ? <MathText key={n} latex={part.slice(2, -2)} block /> : part.startsWith('$') ? <MathText key={n} latex={part.slice(1, -1)} /> : part.startsWith('\\(') ? <MathText key={n} latex={part.slice(2, -2)} /> : <span key={n}>{normalizeEngineeringText(part)}</span>)}</>;
 }
 export function Modal({ title, children, onClose, wide = false }: { title: string; children: ReactNode; onClose: () => void; wide?: boolean }) {
   const dialog = useRef<HTMLDialogElement>(null);

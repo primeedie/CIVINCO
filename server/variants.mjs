@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { vectorReference } from './psad-diagrams.mjs';
 
 const rand = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
 const blankDiagram = () => ({ title: '', caption: '', lines: [], arrows: [], circles: [], rectangles: [], labels: [] });
@@ -48,16 +49,19 @@ export function buildOfflineVariant(source) {
     title = 'Maximum Weight Supported by Two Wires'; topic = 'Equilibrium of Supporting Wires';
     prompt = `Wires AB and AC support a weight at A. AB is inclined 30° above the horizontal to the left and AC is inclined 45° above the horizontal to the right. Their allowable stresses are ${stressAB} MPa and ${stressAC} MPa, and their areas are ${areaAB} mm² and ${areaAC} mm². Determine the largest supported weight.`;
     steps = [
-      { text: 'Convert each allowable stress into an allowable cable tension.', latex: String.raw`T_{AB,allow}=(${stressAB})(${areaAB})=${tidy(limitAB)}\ \mathrm{kN},\quad T_{AC,allow}=(${stressAC})(${areaAC})=${tidy(limitAC)}\ \mathrm{kN}` },
+      { text: 'MPa times mm² gives N. Divide by 1,000 for kN.', latex: String.raw`T_{AB,allow}=\frac{(${stressAB})(${areaAB})}{1000}=${tidy(limitAB)}\ \mathrm{kN},\quad T_{AC,allow}=\frac{(${stressAC})(${areaAC})}{1000}=${tidy(limitAC)}\ \mathrm{kN}` },
       { text: 'Use horizontal equilibrium to identify the controlling cable.', latex: String.raw`T_{AB}\cos30^\circ=T_{AC}\cos45^\circ` },
+      { text: 'Limit AC by its own capacity and by the capacity of AB through equilibrium.', latex: String.raw`T_{AC}=\min\left(${tidy(limitAC)},${tidy(limitAB)}\frac{\cos30^\circ}{\cos45^\circ}\right)=${tidy(tensionAC)}\ \mathrm{kN},\quad T_{AB}=${tidy(tensionAB)}\ \mathrm{kN}` },
       { text: 'Sum the upward components of the two cable tensions.', latex: String.raw`W=T_{AB}\sin30^\circ+T_{AC}\sin45^\circ=${tidy(answer)}\ \mathrm{kN}` },
     ];
   } else if (source.offlineVariant === 'incline-friction') {
-    const weight = rand(10, 40) * 10, angle = [10, 15, 20, 25][rand(0, 3)], coefficient = rand(20, 45) / 100;
-    answer = Math.min(weight * Math.sin(angle * Math.PI / 180), coefficient * weight * Math.cos(angle * Math.PI / 180)); unit = 'N'; preserveDiagram = true;
+    const weight = rand(10, 40) * 10, angle = [10, 15, 20, 25][rand(0, 3)];
+    // Every generated case must admit the stated static equilibrium.
+    const coefficient = (Math.ceil(Math.tan(angle * Math.PI / 180) * 100) + rand(3, 15)) / 100;
+    answer = weight * Math.sin(angle * Math.PI / 180); unit = 'N';
     title = 'Friction Force on an Inclined Block'; topic = 'Friction';
     prompt = `A ${weight} N block rests on a ${angle}° incline. The coefficient of static friction is ${coefficient.toFixed(2)}. Determine the friction force while the block remains at rest.`;
-    steps = [{ text: 'Resolve the weight normal and parallel to the incline.', latex: String.raw`N=W\cos${angle}^\circ,\qquad f_{required}=W\sin${angle}^\circ` }, { text: 'Static friction supplies the required force up to its limiting value.', latex: String.raw`f=\min(W\sin${angle}^\circ,\mu_sW\cos${angle}^\circ)=${tidy(answer)}\ \mathrm N` }];
+    steps = [{ text: 'Resolve the weight normal and parallel to the incline.', latex: String.raw`N=${weight}\cos${angle}^\circ=${tidy(weight*Math.cos(angle*Math.PI/180))}\ \mathrm N` }, { text: 'Check static equilibrium before using it. The required friction is smaller than its limiting value.', latex: String.raw`f_{required}=${weight}\sin${angle}^\circ=${tidy(answer)}\ \mathrm N<\mu_sN=${tidy(coefficient*weight*Math.cos(angle*Math.PI/180))}\ \mathrm N` }, { text: 'Actual static friction balances the downslope component; it need not equal μsN.', latex: String.raw`f_s=${tidy(answer)}\ \mathrm N` }];
   } else if (source.offlineVariant === 'particle-acceleration') {
     const initial = rand(8, 20), coefficient = rand(1, 6), time = rand(2, 8);
     answer = -2 * coefficient * time; unit = 'm/s²';
@@ -78,7 +82,7 @@ export function buildOfflineVariant(source) {
     prompt = `A simply supported rectangular beam ${width} mm wide and ${depth} mm deep carries a uniform load of ${load} kN/m over a ${length} m span. Determine its maximum transverse shear stress.`;
     steps = [{ text: 'The maximum shear force occurs at either support.', latex: String.raw`V_{max}=\frac{wL}{2}=\frac{(${load})(${length})}{2}=${tidy(reaction)}\ \mathrm{kN}` }, { text: 'For a rectangular section, maximum shear stress is 1.5 times the average.', latex: String.raw`\tau_{max}=\frac{3V}{2bd}=\frac{3(${tidy(reaction)}\times10^3)}{2(${width})(${depth})}=${tidy(answer)}\ \mathrm{MPa}` }];
   } else if (source.offlineVariant === 'rc-steel-ratio') {
-    const fc = [21, 25, 28, 32][rand(0, 3)], fy = [400, 415, 420][rand(0, 2)], beta = fc <= 28 ? 0.85 : 0.80;
+    const fc = [21, 25, 28, 35][rand(0, 3)], fy = [400, 415, 420][rand(0, 2)], beta = fc <= 28 ? 0.85 : 0.80;
     answer = 0.85 * beta * fc / fy * (600 / (600 + fy)); unit = ''; tolerance = 0.00001;
     title = 'Balanced Steel Ratio of a Reinforced Concrete Beam'; topic = 'Reinforced Concrete Beams';
     prompt = `For a singly reinforced rectangular beam, use f′c = ${fc} MPa, fy = ${fy} MPa, β₁ = ${beta.toFixed(2)}, Es = 200,000 MPa, and εcu = 0.003. Determine the balanced steel ratio ρb.`;
@@ -89,7 +93,7 @@ export function buildOfflineVariant(source) {
     answer = Math.ceil(Math.sqrt(load * 1000 / strength) / 10) * 10; unit = 'mm'; tolerance = 0;
     title = 'Required Square Tied-Column Dimension'; topic = 'Reinforced Concrete Columns';
     prompt = `A square tied column carries factored axial load ${load} kN. Use f′c = ${fc} MPa, fy = ${fy} MPa, gross steel ratio ${(ratio * 100).toFixed(0)}%, φ = 0.65, and the 0.80 axial-load limit. Determine the required side dimension, rounded up to the next 10 mm.`;
-    steps = [{ text: 'Express the nominal concentric strength in terms of gross area.', latex: String.raw`P_n=A_g[0.85f'_c(1-\rho_g)+f_y\rho_g]` }, { text: 'Apply the tied-column reduction and axial-load limit, then solve for a square side.', latex: String.raw`b=\sqrt{\frac{P_u}{0.65(0.80)[0.85(${fc})(1-${ratio})+${fy}(${ratio})]}}=${answer}\ \mathrm{mm}` }];
+    steps = [{ text: 'Express the nominal concentric strength in terms of gross area.', latex: String.raw`P_n=A_g[0.85f'_c(1-\rho_g)+f_y\rho_g]` }, { text: 'Convert the load to N and apply the tied-column strength factors.', latex: String.raw`b_{min}=\sqrt{\frac{${load}\times10^3}{0.65(0.80)[0.85(${fc})(1-${ratio})+${fy}(${ratio})]}}=${tidy(Math.sqrt(load*1000/strength))}\ \mathrm{mm}` }, { text: 'Round upward to the requested 10 mm increment.', latex: String.raw`b_{use}=10\left\lceil\frac{b_{min}}{10}\right\rceil=${answer}\ \mathrm{mm}` }];
   } else if (source.offlineVariant === 'frame-period') {
     const height = rand(3, 10) * 3, coefficient = 0.0853;
     answer = coefficient * height ** 0.75; unit = 's'; tolerance = 0.005;
@@ -266,7 +270,20 @@ export function buildOfflineVariant(source) {
     prompt = `A ${side} m square footing carries ${load} kN. Using the 2V:1H load-spread method, determine the stress increase ${depth} m below the footing base.`;
     steps = [{ text: 'At depth z, the load spreads to dimensions B + z and L + z.', latex: String.raw`\Delta\sigma_z=\frac{Q}{(B+z)(L+z)}` }, { text: 'Substitute the square-footing dimensions.', latex: String.raw`\Delta\sigma_z=\frac{${load}}{(${side}+${depth})^2}=${tidy(answer)}\ \mathrm{kPa}` }];
   } else return null;
-  return { ...source, id: randomUUID(), sourceBankQuestionId: source.id, pool: false, mode: 'variant', title, topic, prompt, answer, unit, tolerance, steps, solutionQuality: 'worked', diagram: preserveDiagram ? source.diagram : blankDiagram(), diagramImage: preserveDiagram ? source.diagramImage : undefined, createdAt: new Date().toISOString() };
+  // A source picture may contain old dimensions or answers. Only the fixed-angle
+  // wire picture is reusable; new incline values get their own labeled geometry.
+  const diagram = source.offlineVariant === 'vector-resultant' ? vectorReference() : source.offlineVariant === 'incline-friction' ? inclineDiagram(prompt) : preserveDiagram ? source.diagram : blankDiagram();
+  return { ...source, id: randomUUID(), sourceBankQuestionId: source.id, pool: false, mode: 'variant', title, topic, prompt, answer, unit, tolerance, steps, solutionQuality: 'worked', diagram, diagramImage: preserveDiagram ? source.diagramImage : undefined, createdAt: new Date().toISOString() };
+}
+
+function inclineDiagram(prompt) {
+  const weight = prompt.match(/A (\d+) N/)?.[1], angle = Number(prompt.match(/(\d+)° incline/)?.[1]);
+  const rise = 65 * Math.tan(angle*Math.PI/180), y = 78-rise/2;
+  return { ...blankDiagram(), title: 'Inclined block — current givens', caption: 'Weight acts vertically. Static friction acts up the plane; the normal reaction is perpendicular to it.',
+    lines: [{x1:15,y1:78,x2:80,y2:78-rise},{x1:15,y1:78,x2:80,y2:78,dashed:true}],
+    circles:[{cx:47.5,cy:y-2,r:3,filled:true}],
+    arrows:[{x1:47.5,y1:y-2,x2:47.5,y2:94},{x1:47.5,y1:y-2,x2:65,y2:y-2-17.5*Math.tan(angle*Math.PI/180)},{x1:47.5,y1:y-2,x2:47.5-18*Math.sin(angle*Math.PI/180),y2:y-2-18*Math.cos(angle*Math.PI/180)}],
+    labels:[{x:55,y:94,text:`W = ${weight} N`,align:'start'},{x:25,y:82,text:`${angle}°`,align:'start'},{x:68,y:y-10,text:'fₛ',align:'start'},{x:33,y:y-23,text:'N',align:'start'}] };
 }
 
 export function offlineVariants(pool, count) {

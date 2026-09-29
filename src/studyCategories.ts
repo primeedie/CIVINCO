@@ -24,10 +24,13 @@ export function sourceCategory(record: GuideRecord, documents: Source[]) {
   const documentName = clean(documents.find(document => document.id === docId)?.name).toLowerCase();
 
   if (/engineering mechanics and strength of materials/.test(documentName) || (record.spex === 'A' && record.set === 1)) {
-    if (page >= 2 && page <= 10) return 'Statics of Rigid Bodies';
-    if (page >= 11 && page <= 16) return 'Dynamics of Rigid Bodies';
-    if (page >= 17 && page <= 25) return 'Strength of Materials';
-    if (/projectile|kinematic|rectilinear|curvilinear|rotational|dynamics|work and energy|momentum|impulse|conservation of energy|force and acceleration|types of motion/.test(name)) return 'Dynamics of Rigid Bodies';
+    // A bank's sourcePage is an entry number, never a module page number.
+    if ('docId' in record && /engineering mechanics and strength of materials/.test(documentName)) {
+      if (page >= 2 && page <= 10) return 'Statics of Rigid Bodies';
+      if (page >= 11 && page <= 16) return 'Dynamics of Rigid Bodies';
+      if (page >= 17 && page <= 25) return 'Strength of Materials';
+    }
+    if (/projectile|kinematic|rectilinear|curvilinear|rotational|angular|dynamics|work and energy|momentum|impulse|conservation of energy|force and acceleration|types of motion/.test(name)) return 'Dynamics of Rigid Bodies';
     if (/statics|friction|truss|equilibrium|force system|force vector|force decomposition|resultant|moment of a force|3d/.test(name)) return 'Statics of Rigid Bodies';
     return 'Strength of Materials';
   }

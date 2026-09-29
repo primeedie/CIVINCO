@@ -15,6 +15,9 @@ import { createCloudPersistence } from './cloud.mjs';
 import { categorySchema, formulaSchema, gradeAnswer, hasRequiredVisual, problemBankSchema, reviewSchedule, publicQuestion, validLatex, webSourceSchema } from './domain.mjs';
 import { addSamples, sampleQuestions } from './samples.mjs';
 import { offlineVariants } from './variants.mjs';
+import { repairPsadQuestions, PSAD_REVISION } from './psad-repairs.mjs';
+import { repairPsadFormulas } from './psad-formulas.mjs';
+import { BUNDLED_PSAD_ASSETS } from './psad-diagrams.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const dataDir = path.resolve(process.env.CIVINCO_DATA_DIR || path.join(root, 'data'));
@@ -25,6 +28,8 @@ const cloudRecords = await cloud.loadRecords();
 let store;
 store = createStore(dataDir, { initialRecords: cloudRecords, onChange: () => cloud.schedule() });
 cloud.connect(() => store.snapshot());
+repairPsadQuestions(store);
+repairPsadFormulas(store);
 const localSettings = {
   geminiApiKey: process.env.GEMINI_API_KEY || '',
   model: process.env.GEMINI_MODEL || 'gemini-3.6-flash',
@@ -46,7 +51,7 @@ app.use((req, res, next) => {
 });
 app.use(express.json({ limit: '2mb' }));
 app.get('/api/access/status', (req, res) => res.json({ locked: access.enabled && !access.status(req) }));
-app.get('/api/health', (_req, res) => res.json({ ok: true, persistence: cloud.enabled ? 'supabase' : 'local' }));
+app.get('/api/health', (_req, res) => res.json({ ok: true, persistence: cloud.enabled ? 'supabase' : 'local', contentRevision: PSAD_REVISION }));
 app.post('/api/access/unlock', (req, res) => {
   const { password } = z.object({ password: z.string().min(1).max(200) }).parse(req.body);
   const session = access.unlock(req, password);
@@ -57,6 +62,7 @@ app.post('/api/access/logout', (req, res) => { res.setHeader('Set-Cookie', [acce
 app.use('/api', (req, res, next) => access.middleware(req, res, next));
 const upload = multer({ dest: uploadDir, limits: { fileSize: 50 * 1024 * 1024, files: 20 } });
 async function readAsset(storageName) {
+  if (BUNDLED_PSAD_ASSETS.has(storageName)) return readFile(path.join(root,'server','assets',storageName));
   try { return await readFile(path.join(uploadDir, storageName)); }
   catch (error) {
     if (error.code !== 'ENOENT' || !cloud.enabled) throw error;

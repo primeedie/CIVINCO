@@ -97,3 +97,13 @@ main{max-width:1320px;padding-top:31px}.page-heading{position:relative;padding-l
 .problem-prompt{max-width:930px}.problem-prompt p{margin:0 0 10px;line-height:1.85}.problem-prompt p:last-child{margin-bottom:0}.solution-step{align-items:flex-start}.solution-step>div{min-width:0;flex:1}.solution-step .math-block{font-size:18px;line-height:1.6}.solution-step .katex-display{margin:.35em 0}.solution-step .katex-display>.katex{white-space:nowrap}.solution-step p:empty{display:none}
 @media(max-width:720px){.problem-prompt p{line-height:1.75}.solution-step .math-block{font-size:15px;padding:10px}.solution-step .katex-display{overflow-x:auto;overflow-y:hidden}}
 .guide-more{margin:20px auto 0;display:flex}.guide-formula .formula-context-diagram{margin-top:18px}
+
+/* Keep equation scrolling inside its card at every GUI scale. */
+.formula-card{content-visibility:auto;contain-intrinsic-size:auto 640px}
+.math-block{max-width:100%;overflow-x:auto;overflow-y:hidden;min-width:0}
+.formula-card,.guide-formula,.solution-panel,.problem-panel{min-width:0}
+.formula-context-diagram svg{width:100%;height:auto;display:block}
+.formula-context-diagram marker path,.engineering-diagram marker path{fill:var(--text)}
+.source-diagram>a{display:block;cursor:zoom-in}.source-diagram img{max-width:100%;height:auto}
+.solution-step .math-block,.solution-step .katex-display>.katex{text-align:left}
+@media(max-width:720px){.solution-step{gap:10px}.solution-step>span{flex-shrink:0}.formula-context-diagram{padding:10px}.formula-context-diagram figcaption{font-size:12px}}

@@ -78,7 +78,8 @@ test('offline variations recalculate supported figure-free problems without AI',
       assert.equal(Number.isFinite(question.answer), true, offlineVariant);
       assert.equal(question.mode, 'variant');
       assert.equal(question.sourceBankQuestionId, offlineVariant);
-      assert.equal(question.diagram.labels.length, 0);
+      if (offlineVariant === 'vector-resultant') assert.ok(question.diagram.labels.some(label => label.text.includes('λ')));
+      else assert.equal(question.diagram.labels.length, 0);
       assert.equal(question.steps.every(step => !step.latex || validLatex(step.latex)), true, offlineVariant);
       assert.ok(Math.abs(question.answer - independentlySolve(question)) <= question.tolerance, `${offlineVariant}: recalculated answer must match changed givens`);
     }
@@ -99,7 +100,7 @@ test('PSAD offline variations independently agree with every changed given', () 
   const number = (text, pattern) => Number(text.match(pattern)?.[1]);
   const solve = question => {
     const p = question.prompt;
-    if (question.offlineVariant === 'incline-friction') { const W=number(p,/A (\d+) N/), a=number(p,/(\d+)° incline/), mu=number(p,/is (\d+(?:\.\d+)?)/); return Math.min(W*Math.sin(a*Math.PI/180),mu*W*Math.cos(a*Math.PI/180)); }
+    if (question.offlineVariant === 'incline-friction') { const W=number(p,/A (\d+) N/), a=number(p,/(\d+)° incline/), mu=number(p,/is (\d+(?:\.\d+)?)/); assert.ok(mu>=Math.tan(a*Math.PI/180),'at-rest givens must permit equilibrium'); assert.equal(question.diagramImage,undefined,'source image must not retain old givens'); return W*Math.sin(a*Math.PI/180); }
     if (question.offlineVariant === 'particle-acceleration') { const c=number(p,/ - (\d+)t²/), t=number(p,/t = (\d+) s/); return -2*c*t; }
     if (question.offlineVariant === 'thin-wall-hoop') { const D=number(p,/diameter (\d+) mm/), t=number(p,/thickness (\d+) mm/), pressure=number(p,/pressure ([\d.]+) MPa/); return pressure*(D-2*t)/(2*t); }
     if (question.offlineVariant === 'beam-max-shear') { const b=number(p,/beam (\d+) mm wide/), d=number(p,/and (\d+) mm deep/), w=number(p,/load of (\d+) kN\/m/), L=number(p,/over a (\d+) m span/); return 1.5*(w*L/2)*1000/(b*d); }
