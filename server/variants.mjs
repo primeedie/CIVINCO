@@ -7,7 +7,7 @@ const factorial = n => Array.from({ length: n }, (_, index) => index + 1).reduce
 const choose = (n, r) => factorial(n) / (factorial(r) * factorial(n - r));
 
 export function buildOfflineVariant(source) {
-  let title = source.title, topic = source.topic, prompt, answer, unit, tolerance = 0.01, steps;
+  let title = source.title, topic = source.topic, prompt, answer, unit, tolerance = 0.01, steps, preserveDiagram = false;
   if (source.offlineVariant === 'vector-resultant') {
     const magnitudes = [rand(4, 9) * 40, rand(3, 8) * 40, rand(4, 10) * 40];
     const directions = [[5, -2, 7], [-3, 0, -4], [2, 1, -6]];
@@ -39,6 +39,77 @@ export function buildOfflineVariant(source) {
       { text: 'Convert torque, length, modulus, and angle to compatible N-mm units and radians.', latex: String.raw`T=${torque}\times10^6\ \mathrm{N\,mm},\quad L=${length * 1000}\ \mathrm{mm},\quad G=${modulus * 1000}\ \mathrm{MPa},\quad\theta=${angle}\frac{\pi}{180}` },
       { text: 'Rearrange the angle-of-twist equation.', latex: String.raw`J=\frac{TL}{G\theta}=${tidy(answer)}\times10^6\ \mathrm{mm^4}` },
     ];
+  } else if (source.offlineVariant === 'wire-supported-weight') {
+    const stressAB = rand(8, 16) * 10, stressAC = rand(10, 20) * 10, areaAB = rand(3, 7) * 100, areaAC = rand(2, 5) * 100;
+    const limitAB = stressAB * areaAB / 1000, limitAC = stressAC * areaAC / 1000;
+    const ratio = Math.cos(Math.PI / 4) / Math.cos(Math.PI / 6);
+    const tensionAC = Math.min(limitAC, limitAB / ratio), tensionAB = ratio * tensionAC;
+    answer = tensionAB * Math.sin(Math.PI / 6) + tensionAC * Math.sin(Math.PI / 4); unit = 'kN'; preserveDiagram = true;
+    title = 'Maximum Weight Supported by Two Wires'; topic = 'Equilibrium of Supporting Wires';
+    prompt = `Wires AB and AC support a weight at A. AB is inclined 30° above the horizontal to the left and AC is inclined 45° above the horizontal to the right. Their allowable stresses are ${stressAB} MPa and ${stressAC} MPa, and their areas are ${areaAB} mm² and ${areaAC} mm². Determine the largest supported weight.`;
+    steps = [
+      { text: 'Convert each allowable stress into an allowable cable tension.', latex: String.raw`T_{AB,allow}=(${stressAB})(${areaAB})=${tidy(limitAB)}\ \mathrm{kN},\quad T_{AC,allow}=(${stressAC})(${areaAC})=${tidy(limitAC)}\ \mathrm{kN}` },
+      { text: 'Use horizontal equilibrium to identify the controlling cable.', latex: String.raw`T_{AB}\cos30^\circ=T_{AC}\cos45^\circ` },
+      { text: 'Sum the upward components of the two cable tensions.', latex: String.raw`W=T_{AB}\sin30^\circ+T_{AC}\sin45^\circ=${tidy(answer)}\ \mathrm{kN}` },
+    ];
+  } else if (source.offlineVariant === 'incline-friction') {
+    const weight = rand(10, 40) * 10, angle = [10, 15, 20, 25][rand(0, 3)], coefficient = rand(20, 45) / 100;
+    answer = Math.min(weight * Math.sin(angle * Math.PI / 180), coefficient * weight * Math.cos(angle * Math.PI / 180)); unit = 'N'; preserveDiagram = true;
+    title = 'Friction Force on an Inclined Block'; topic = 'Friction';
+    prompt = `A ${weight} N block rests on a ${angle}° incline. The coefficient of static friction is ${coefficient.toFixed(2)}. Determine the friction force while the block remains at rest.`;
+    steps = [{ text: 'Resolve the weight normal and parallel to the incline.', latex: String.raw`N=W\cos${angle}^\circ,\qquad f_{required}=W\sin${angle}^\circ` }, { text: 'Static friction supplies the required force up to its limiting value.', latex: String.raw`f=\min(W\sin${angle}^\circ,\mu_sW\cos${angle}^\circ)=${tidy(answer)}\ \mathrm N` }];
+  } else if (source.offlineVariant === 'particle-acceleration') {
+    const initial = rand(8, 20), coefficient = rand(1, 6), time = rand(2, 8);
+    answer = -2 * coefficient * time; unit = 'm/s²';
+    title = 'Acceleration from a Velocity Function'; topic = 'Rectilinear Motion';
+    prompt = `A particle moves along a straight line with velocity v = ${initial} - ${coefficient}t² m/s, where t is in seconds. Determine its acceleration at t = ${time} s.`;
+    steps = [{ text: 'Differentiate velocity with respect to time.', latex: String.raw`a=\frac{dv}{dt}=-2(${coefficient})t` }, { text: 'Evaluate at the stated time.', latex: String.raw`a=-2(${coefficient})(${time})=${answer}\ \mathrm{m/s^2}` }];
+  } else if (source.offlineVariant === 'thin-wall-hoop') {
+    const outside = rand(40, 90) * 10, thickness = rand(6, 18), pressure = rand(10, 40) / 10, inside = outside - 2 * thickness;
+    answer = pressure * inside / (2 * thickness); unit = 'MPa';
+    title = 'Circumferential Stress in a Thin-Walled Tank'; topic = 'Thin-Walled Pressure Vessels';
+    prompt = `A thin-walled steel tank has outside diameter ${outside} mm and wall thickness ${thickness} mm. It is subjected to internal pressure ${pressure.toFixed(1)} MPa. Determine the circumferential stress using the inside diameter.`;
+    steps = [{ text: 'Obtain the inside diameter.', latex: String.raw`D_i=${outside}-2(${thickness})=${inside}\ \mathrm{mm}` }, { text: 'Apply the thin-cylinder hoop-stress relation.', latex: String.raw`\sigma_h=\frac{pD_i}{2t}=\frac{(${pressure})(${inside})}{2(${thickness})}=${tidy(answer)}\ \mathrm{MPa}` }];
+  } else if (source.offlineVariant === 'beam-max-shear') {
+    const width = rand(8, 20) * 10, depth = rand(15, 35) * 10, load = rand(3, 12), length = rand(3, 8);
+    const reaction = load * length / 2;
+    answer = 1.5 * reaction * 1000 / (width * depth); unit = 'MPa';
+    title = 'Maximum Shear Stress in a Rectangular Beam'; topic = 'Beam Shear';
+    prompt = `A simply supported rectangular beam ${width} mm wide and ${depth} mm deep carries a uniform load of ${load} kN/m over a ${length} m span. Determine its maximum transverse shear stress.`;
+    steps = [{ text: 'The maximum shear force occurs at either support.', latex: String.raw`V_{max}=\frac{wL}{2}=\frac{(${load})(${length})}{2}=${tidy(reaction)}\ \mathrm{kN}` }, { text: 'For a rectangular section, maximum shear stress is 1.5 times the average.', latex: String.raw`\tau_{max}=\frac{3V}{2bd}=\frac{3(${tidy(reaction)}\times10^3)}{2(${width})(${depth})}=${tidy(answer)}\ \mathrm{MPa}` }];
+  } else if (source.offlineVariant === 'rc-steel-ratio') {
+    const fc = [21, 25, 28, 32][rand(0, 3)], fy = [400, 415, 420][rand(0, 2)], beta = fc <= 28 ? 0.85 : 0.80;
+    answer = 0.85 * beta * fc / fy * (600 / (600 + fy)); unit = ''; tolerance = 0.00001;
+    title = 'Balanced Steel Ratio of a Reinforced Concrete Beam'; topic = 'Reinforced Concrete Beams';
+    prompt = `For a singly reinforced rectangular beam, use f′c = ${fc} MPa, fy = ${fy} MPa, β₁ = ${beta.toFixed(2)}, Es = 200,000 MPa, and εcu = 0.003. Determine the balanced steel ratio ρb.`;
+    steps = [{ text: 'Compute the steel yield strain and the balanced neutral-axis ratio.', latex: String.raw`\varepsilon_y=\frac{${fy}}{200000},\qquad\frac{c_b}{d}=\frac{0.003}{0.003+\varepsilon_y}` }, { text: 'Apply force equilibrium at the balanced condition.', latex: String.raw`\rho_b=0.85\beta_1\frac{f'_c}{f_y}\frac{c_b}{d}=${tidy(answer)}` }];
+  } else if (source.offlineVariant === 'tied-column-size') {
+    const load = rand(15, 40) * 100, fc = [21, 28, 35][rand(0, 2)], fy = [400, 415, 420][rand(0, 2)], ratio = rand(2, 4) / 100;
+    const strength = 0.65 * 0.80 * (0.85 * fc * (1 - ratio) + fy * ratio);
+    answer = Math.ceil(Math.sqrt(load * 1000 / strength) / 10) * 10; unit = 'mm'; tolerance = 0;
+    title = 'Required Square Tied-Column Dimension'; topic = 'Reinforced Concrete Columns';
+    prompt = `A square tied column carries factored axial load ${load} kN. Use f′c = ${fc} MPa, fy = ${fy} MPa, gross steel ratio ${(ratio * 100).toFixed(0)}%, φ = 0.65, and the 0.80 axial-load limit. Determine the required side dimension, rounded up to the next 10 mm.`;
+    steps = [{ text: 'Express the nominal concentric strength in terms of gross area.', latex: String.raw`P_n=A_g[0.85f'_c(1-\rho_g)+f_y\rho_g]` }, { text: 'Apply the tied-column reduction and axial-load limit, then solve for a square side.', latex: String.raw`b=\sqrt{\frac{P_u}{0.65(0.80)[0.85(${fc})(1-${ratio})+${fy}(${ratio})]}}=${answer}\ \mathrm{mm}` }];
+  } else if (source.offlineVariant === 'frame-period') {
+    const height = rand(3, 10) * 3, coefficient = 0.0853;
+    answer = coefficient * height ** 0.75; unit = 's'; tolerance = 0.005;
+    title = 'Approximate Period of a Steel Moment Frame'; topic = 'Seismic Design';
+    prompt = `A steel moment-resisting frame has total height hn = ${height} m. Using Ct = ${coefficient} and exponent 3/4, determine its approximate fundamental period.`;
+    steps = [{ text: 'Apply the NSCP approximate-period expression for the stated frame type.', latex: String.raw`T=C_t h_n^{3/4}` }, { text: 'Substitute the building height.', latex: String.raw`T=${coefficient}(${height})^{3/4}=${tidy(answer)}\ \mathrm s` }];
+  } else if (source.offlineVariant === 'footing-moment') {
+    const width = rand(25, 45) / 10, length = rand(30, 55) / 10, column = rand(3, 6) / 10, dead = rand(8, 16) * 100, live = rand(8, 18) * 100;
+    const pressure = (1.2 * dead + 1.6 * live) / (width * length), projection = (length - column) / 2;
+    answer = pressure * width * projection ** 2 / 2; unit = 'kN·m';
+    title = 'Critical Factored Moment of a Rectangular Footing'; topic = 'Footing Flexure';
+    prompt = `A ${width.toFixed(1)} m × ${length.toFixed(1)} m footing supports a centered ${column.toFixed(1)} m square column. Service loads are DL = ${dead} kN and LL = ${live} kN. Using 1.2DL + 1.6LL, determine the factored cantilever moment at the column face across the footing width.`;
+    steps = [{ text: 'Calculate factored load and uniform factored soil pressure.', latex: String.raw`P_u=1.2(${dead})+1.6(${live}),\qquad q_u=\frac{P_u}{(${width})(${length})}=${tidy(pressure)}\ \mathrm{kPa}` }, { text: 'Treat the projection beyond the column face as a uniformly loaded cantilever.', latex: String.raw`M_u=q_uB\frac{\ell^2}{2}=${tidy(pressure)}(${width})\frac{(${tidy(projection)})^2}{2}=${tidy(answer)}\ \mathrm{kN\cdot m}` }];
+  } else if (source.offlineVariant === 'footing-one-way-shear') {
+    const width = rand(25, 45) / 10, length = rand(30, 55) / 10, column = rand(3, 6) / 10, depth = rand(3, 6) / 10, dead = rand(8, 16) * 100, live = rand(8, 18) * 100;
+    const pressure = (1.2 * dead + 1.6 * live) / (width * length), projection = (length - column) / 2 - depth;
+    answer = pressure * width * projection; unit = 'kN';
+    title = 'Factored One-Way Shear in a Rectangular Footing'; topic = 'Footing Shear';
+    prompt = `A ${width.toFixed(1)} m × ${length.toFixed(1)} m footing supports a centered ${column.toFixed(1)} m square column. Its effective depth is ${depth.toFixed(1)} m, with service loads DL = ${dead} kN and LL = ${live} kN. Using 1.2DL + 1.6LL, determine factored one-way shear at a section d from the column face.`;
+    steps = [{ text: 'Calculate the factored soil pressure.', latex: String.raw`q_u=\frac{1.2(${dead})+1.6(${live})}{(${width})(${length})}=${tidy(pressure)}\ \mathrm{kPa}` }, { text: 'Multiply by the footing area outside the critical section.', latex: String.raw`V_u=q_uB\left(\frac{L-c}{2}-d\right)=${tidy(answer)}\ \mathrm{kN}` }];
   } else if (source.offlineVariant === 'dice-sum') {
     const limit = rand(5, 11), favorable = Array.from({ length: 6 }, (_, a) => Array.from({ length: 6 }, (_, b) => a + b + 2 < limit ? 1 : 0)).flat().reduce((a, b) => a + b, 0);
     answer = favorable / 36; unit = ''; tolerance = 0.001;
@@ -195,7 +266,7 @@ export function buildOfflineVariant(source) {
     prompt = `A ${side} m square footing carries ${load} kN. Using the 2V:1H load-spread method, determine the stress increase ${depth} m below the footing base.`;
     steps = [{ text: 'At depth z, the load spreads to dimensions B + z and L + z.', latex: String.raw`\Delta\sigma_z=\frac{Q}{(B+z)(L+z)}` }, { text: 'Substitute the square-footing dimensions.', latex: String.raw`\Delta\sigma_z=\frac{${load}}{(${side}+${depth})^2}=${tidy(answer)}\ \mathrm{kPa}` }];
   } else return null;
-  return { ...source, id: randomUUID(), sourceBankQuestionId: source.id, pool: false, mode: 'variant', title, topic, prompt, answer, unit, tolerance, steps, solutionQuality: 'worked', diagram: blankDiagram(), diagramImage: undefined, createdAt: new Date().toISOString() };
+  return { ...source, id: randomUUID(), sourceBankQuestionId: source.id, pool: false, mode: 'variant', title, topic, prompt, answer, unit, tolerance, steps, solutionQuality: 'worked', diagram: preserveDiagram ? source.diagram : blankDiagram(), diagramImage: preserveDiagram ? source.diagramImage : undefined, createdAt: new Date().toISOString() };
 }
 
 export function offlineVariants(pool, count) {

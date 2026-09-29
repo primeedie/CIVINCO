@@ -23,6 +23,7 @@ function remindersFor(topic: string) {
 
 export function Guide({ state, filter, refresh, navigate }: SharedProps & { navigate: (view: View) => void }) {
   const [bankExamples, setBankExamples] = useState<Question[]>([]), [pendingExample, setPendingExample] = useState<Question | null>(null), [openingExample, setOpeningExample] = useState(''), [exampleError, setExampleError] = useState('');
+  const [showAllConcepts, setShowAllConcepts] = useState(false), [showAllFormulas, setShowAllFormulas] = useState(false);
   const scopedItems = filter(state.items);
   const scopedQuestions = filter(state.questions);
   const scopedAttempts = filter(state.attempts).filter(attempt => !attempt.revealed);
@@ -30,11 +31,14 @@ export function Guide({ state, filter, refresh, navigate }: SharedProps & { navi
   const categories = useMemo(() => unique(records.filter(record => clean(record.topic)).map(record => sourceCategory(record, state.documents))).sort((a, b) => categoryPosition(a) - categoryPosition(b) || a.localeCompare(b)), [scopedItems, scopedQuestions, state.documents]);
   const [selected, setSelected] = useState('');
   useEffect(() => { if (!categories.includes(selected)) setSelected(categories[0] || ''); }, [categories.join('|'), selected]);
+  useEffect(() => { setShowAllConcepts(false); setShowAllFormulas(false); }, [selected]);
 
   const documentOrder = new Map(state.documents.map((document, index) => [document.id, index]));
   const entries = scopedItems.filter(item => sourceCategory(item, state.documents) === selected).sort((a, b) => compareByPdfOrder(a, b, documentOrder));
   const concepts = entries.filter(item => item.kind === 'concept');
   const formulas = entries.filter(item => item.kind === 'formula');
+  const visibleConcepts = showAllConcepts ? concepts : concepts.slice(0, 24);
+  const visibleFormulas = showAllFormulas ? formulas : formulas.slice(0, 24);
   const uncheckedCount = formulas.filter(item => !item.reviewed || item.uncertain).length;
   const applications = unique(formulas.map(item => clean(item.conditions)).filter(Boolean));
   const categoryQuestions = scopedQuestions.filter(question => sourceCategory(question, state.documents) === selected).sort((a, b) => a.spex.localeCompare(b.spex) || a.set - b.set || (documentOrder.get(a.sourceDocId || '') ?? 9999) - (documentOrder.get(b.sourceDocId || '') ?? 9999) || (a.sourcePage || 0) - (b.sourcePage || 0));
@@ -89,12 +93,12 @@ export function Guide({ state, filter, refresh, navigate }: SharedProps & { navi
 
       <section className="guide-section">
         <div className="guide-section-title"><BookCheck size={19} /><div><span>CORE IDEAS</span><h3>Understand before memorizing</h3></div></div>
-        {concepts.length ? <div className="guide-concepts">{concepts.map(concept => <div key={concept.id}><h4>{concept.title}</h4><p><RichText text={concept.explanation || 'Review the connected source for the complete explanation.'} /></p><SourceLink doc={state.documents.find(document => document.id === concept.docId)} page={concept.page} /></div>)}</div> : <p className="guide-empty-note">No separate concept notes were extracted for this topic yet. Use the equations and their applicability conditions as the starting outline, then consult the connected source pages.</p>}
+        {concepts.length ? <><div className="guide-concepts">{visibleConcepts.map(concept => <div key={concept.id}><h4>{concept.title}</h4><p><RichText text={concept.explanation || 'Review the connected source for the complete explanation.'} /></p><SourceLink doc={state.documents.find(document => document.id === concept.docId)} page={concept.page} /></div>)}</div>{concepts.length > 24 && <button className="button secondary guide-more" onClick={() => setShowAllConcepts(value => !value)}>{showAllConcepts ? 'Show first 24 concepts' : `Show all ${concepts.length} concepts`}</button>}</> : <p className="guide-empty-note">No separate concept notes were extracted for this topic yet. Use the equations and their applicability conditions as the starting outline, then consult the connected source pages.</p>}
       </section>
 
       <section className="guide-section">
         <div className="guide-section-title"><Lightbulb size={19} /><div><span>WHAT TO REMEMBER</span><h3>Equations from your materials</h3></div></div>
-        {formulas.length ? <div className="guide-formulas">{formulas.map(formula => <div key={formula.id} className={`guide-formula ${formula.uncertain ? 'uncertain' : ''}`}><div><div><h4>{formula.title}</h4><span className={`guide-formula-status ${formula.reviewed && !formula.uncertain ? 'checked' : ''}`}>{formula.uncertain ? 'Notation uncertain' : formula.reviewed ? 'Source checked' : 'Not reviewed'}</span></div><MathText latex={formula.latex || ''} block /></div>{formula.variables?.length ? <dl>{formula.variables.map((variable, index) => <div key={`${variable.symbol}-${index}`}><dt><MathText latex={normalizeMathSymbol(variable.symbol)} /></dt><dd>{variable.meaning}{variable.unit && <small>{normalizeEngineeringText(variable.unit)}</small>}</dd></div>)}</dl> : null}{formula.conditions && <p className="guide-formula-condition"><strong>Use when</strong> <RichText text={formula.conditions} /></p>}<SourceLink doc={state.documents.find(document => document.id === formula.docId)} page={formula.page} /></div>)}</div> : <p className="guide-empty-note">No equations were extracted for this topic yet. Check the connected concept sources or add a formula manually.</p>}
+        {formulas.length ? <><div className="guide-formulas">{visibleFormulas.map(formula => <div key={formula.id} className={`guide-formula ${formula.uncertain ? 'uncertain' : ''}`}><div><div><h4>{formula.title}</h4><span className={`guide-formula-status ${formula.reviewed && !formula.uncertain ? 'checked' : ''}`}>{formula.uncertain ? 'Notation uncertain' : formula.reviewed ? 'Source checked' : 'Not reviewed'}</span></div><MathText latex={formula.latex || ''} block contextDiagram /></div>{formula.variables?.length ? <dl>{formula.variables.map((variable, index) => <div key={`${variable.symbol}-${index}`}><dt><MathText latex={normalizeMathSymbol(variable.symbol)} /></dt><dd>{variable.meaning}{variable.unit && <small>{normalizeEngineeringText(variable.unit)}</small>}</dd></div>)}</dl> : null}{formula.conditions && <p className="guide-formula-condition"><strong>Use when</strong> <RichText text={formula.conditions} /></p>}<SourceLink doc={state.documents.find(document => document.id === formula.docId)} page={formula.page} /></div>)}</div>{formulas.length > 24 && <button className="button secondary guide-more" onClick={() => setShowAllFormulas(value => !value)}>{showAllFormulas ? 'Show first 24 equations' : `Show all ${formulas.length} equations`}</button>}</> : <p className="guide-empty-note">No equations were extracted for this topic yet. Check the connected concept sources or add a formula manually.</p>}
         {!!uncheckedCount && <div className="guide-caution"><AlertTriangle size={17} /><span>{uncheckedCount} equation{uncheckedCount === 1 ? ' is' : 's are'} shown with a review warning. Compare {uncheckedCount === 1 ? 'it' : 'them'} with the connected source before relying on the notation.</span></div>}
       </section>
 

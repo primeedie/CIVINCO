@@ -96,3 +96,4 @@ main{max-width:1320px;padding-top:31px}.page-heading{position:relative;padding-l
 @media(max-width:720px){.guide-example{padding-left:14px}.guide-example-prompt{font-size:12px}.guide-example .engineering-diagram{margin:15px 0}.guide-example>.button{width:100%}}
 .problem-prompt{max-width:930px}.problem-prompt p{margin:0 0 10px;line-height:1.85}.problem-prompt p:last-child{margin-bottom:0}.solution-step{align-items:flex-start}.solution-step>div{min-width:0;flex:1}.solution-step .math-block{font-size:18px;line-height:1.6}.solution-step .katex-display{margin:.35em 0}.solution-step .katex-display>.katex{white-space:nowrap}.solution-step p:empty{display:none}
 @media(max-width:720px){.problem-prompt p{line-height:1.75}.solution-step .math-block{font-size:15px;padding:10px}.solution-step .katex-display{overflow-x:auto;overflow-y:hidden}}
+.guide-more{margin:20px auto 0;display:flex}.guide-formula .formula-context-diagram{margin-top:18px}

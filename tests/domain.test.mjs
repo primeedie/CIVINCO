@@ -85,15 +85,35 @@ test('offline variations recalculate supported figure-free problems without AI',
   }
 });
 test('expanded offline variation families produce finite answers and valid worked notation', () => {
-  const kinds = ['hydraulic-jack', 'barometer-height', 'iceberg-volume', 'barge-draft', 'soil-zero-void', 'moist-unit-weight', 'bus-speed', 'polygon-diagonals', 'work-rate', 'father-son', 'exponential-wait', 'binomial-exact', 'hooke-spring', 'rectangle-semicircle', 'rectangle-ellipse', 'stopping-friction', 'superelevation', 'centripetal-force', 'accident-rate', 'footing-base-pressure', 'two-to-one-spread'];
+  const kinds = ['hydraulic-jack', 'barometer-height', 'iceberg-volume', 'barge-draft', 'soil-zero-void', 'moist-unit-weight', 'bus-speed', 'polygon-diagonals', 'work-rate', 'father-son', 'exponential-wait', 'binomial-exact', 'hooke-spring', 'rectangle-semicircle', 'rectangle-ellipse', 'stopping-friction', 'superelevation', 'centripetal-force', 'accident-rate', 'footing-base-pressure', 'two-to-one-spread', 'wire-supported-weight', 'incline-friction', 'particle-acceleration', 'thin-wall-hoop', 'beam-max-shear', 'rc-steel-ratio', 'tied-column-size', 'frame-period', 'footing-moment', 'footing-one-way-shear'];
   for (const offlineVariant of kinds) for (let iteration = 0; iteration < 25; iteration++) {
     const question = buildOfflineVariant({ id: offlineVariant, offlineVariant, title: 'Source', topic: 'Topic', spex: 'A', set: 1, sourceIds: [], sourceDocId: 'doc', sourcePage: 1 });
     assert.ok(question, offlineVariant);
     assert.equal(Number.isFinite(question.answer), true, offlineVariant);
-    assert.equal(question.answer >= 0, true, offlineVariant);
+    assert.equal(offlineVariant === 'particle-acceleration' || question.answer >= 0, true, offlineVariant);
     assert.equal(question.steps.every(step => !step.latex || validLatex(step.latex)), true, offlineVariant);
     assert.match(question.prompt, /\d/);
   }
+});
+test('PSAD offline variations independently agree with every changed given', () => {
+  const number = (text, pattern) => Number(text.match(pattern)?.[1]);
+  const solve = question => {
+    const p = question.prompt;
+    if (question.offlineVariant === 'incline-friction') { const W=number(p,/A (\d+) N/), a=number(p,/(\d+)° incline/), mu=number(p,/is (\d+(?:\.\d+)?)/); return Math.min(W*Math.sin(a*Math.PI/180),mu*W*Math.cos(a*Math.PI/180)); }
+    if (question.offlineVariant === 'particle-acceleration') { const c=number(p,/ - (\d+)t²/), t=number(p,/t = (\d+) s/); return -2*c*t; }
+    if (question.offlineVariant === 'thin-wall-hoop') { const D=number(p,/diameter (\d+) mm/), t=number(p,/thickness (\d+) mm/), pressure=number(p,/pressure ([\d.]+) MPa/); return pressure*(D-2*t)/(2*t); }
+    if (question.offlineVariant === 'beam-max-shear') { const b=number(p,/beam (\d+) mm wide/), d=number(p,/and (\d+) mm deep/), w=number(p,/load of (\d+) kN\/m/), L=number(p,/over a (\d+) m span/); return 1.5*(w*L/2)*1000/(b*d); }
+    if (question.offlineVariant === 'rc-steel-ratio') { const fc=number(p,/f′c = (\d+)/), fy=number(p,/fy = (\d+)/), beta=number(p,/β₁ = ([\d.]+)/); return .85*beta*fc/fy*(.003/(.003+fy/200000)); }
+    if (question.offlineVariant === 'frame-period') { const h=number(p,/hn = (\d+) m/), Ct=number(p,/Ct = ([\d.]+)/); return Ct*h**.75; }
+    if (question.offlineVariant === 'wire-supported-weight') { const values=[...p.matchAll(/(\d+(?:\.\d+)?)/g)].map(m=>Number(m[1])), [, , stressAB,stressAC,areaAB,areaAC]=values; const ab=stressAB*areaAB/1000,ac=stressAC*areaAC/1000,ratio=Math.cos(Math.PI/4)/Math.cos(Math.PI/6),tac=Math.min(ac,ab/ratio); return ratio*tac*.5+tac*Math.sin(Math.PI/4); }
+    if (question.offlineVariant === 'tied-column-size') { const Pu=number(p,/load (\d+) kN/),fc=number(p,/f′c = (\d+)/),fy=number(p,/fy = (\d+)/),rho=number(p,/ratio (\d+)%/)/100; return Math.ceil(Math.sqrt(Pu*1000/(.65*.80*(.85*fc*(1-rho)+fy*rho)))/10)*10; }
+    const dimensions=p.match(/A ([\d.]+) m × ([\d.]+) m/),B=Number(dimensions?.[1]),L=Number(dimensions?.[2]),c=number(p,/centered ([\d.]+) m/),DL=number(p,/DL = (\d+)/),LL=number(p,/LL = (\d+)/),q=(1.2*DL+1.6*LL)/(B*L);
+    if (question.offlineVariant === 'footing-moment') return q*B*((L-c)/2)**2/2;
+    if (question.offlineVariant === 'footing-one-way-shear') { const d=number(p,/depth is ([\d.]+) m/); return q*B*((L-c)/2-d); }
+    throw new Error(`Missing independent solver for ${question.offlineVariant}`);
+  };
+  const kinds=['wire-supported-weight','incline-friction','particle-acceleration','thin-wall-hoop','beam-max-shear','rc-steel-ratio','tied-column-size','frame-period','footing-moment','footing-one-way-shear'];
+  for (const kind of kinds) for (let i=0;i<20;i++) { const q=buildOfflineVariant({id:kind,offlineVariant:kind,title:'Source',topic:'PSAD',spex:'A',set:1,sourceIds:[]}); assert.ok(Math.abs(q.answer-solve(q))<=Math.max(q.tolerance,1e-5),`${kind}: ${q.answer}`); }
 });
 test('durable store, sample symbol fidelity, all sample question families and rollback', () => {
   const directory = mkdtempSync(path.join(os.tmpdir(), 'civinco-unit-'));
